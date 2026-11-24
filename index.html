@@ -20,13 +20,16 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:15px/1
 #view canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 #bonetag{position:absolute;left:10px;top:8px;background:rgba(0,0,0,.55);border:1px solid var(--line);border-radius:10px;padding:6px 10px;font-size:14px}
 #bonetag b{color:var(--acc)}
-#hintv{position:absolute;right:10px;top:8px;font-size:12px;color:var(--dim);text-align:right;pointer-events:none}
-#vtools{position:absolute;left:10px;bottom:10px;display:flex;gap:8px;flex-wrap:wrap}
+#hintv{position:absolute;left:10px;bottom:10px;font-size:11px;color:var(--dim);opacity:.7;pointer-events:none}
+#vtools{position:absolute;right:calc(6px + env(safe-area-inset-right));bottom:8px;display:grid;grid-template-columns:repeat(2,50px);gap:5px}
+#vtools button{min-height:44px;height:46px;padding:0;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:17px;line-height:1}
+#vtools button small{font:600 9px -apple-system,system-ui,sans-serif;margin-top:2px;opacity:.85}
 #vtools button{background:rgba(20,21,25,.32);border-color:rgba(255,255,255,.12);color:rgba(236,234,230,.8);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
 #vtools button.on{background:rgba(255,122,46,.38);border-color:rgba(255,122,46,.55);color:#fff;outline:0}
 #bonetag{opacity:.8}
-#uiBack{position:absolute;right:calc(10px + env(safe-area-inset-right));top:8px;display:none;min-height:40px;padding:0 12px;background:rgba(20,21,25,.22);border:1px solid rgba(255,255,255,.12);color:rgba(236,234,230,.55);border-radius:10px;font-size:15px}
-body.clean #uiBack{display:block}
+#cleanBar{position:absolute;right:calc(10px + env(safe-area-inset-right));top:8px;display:none;gap:6px}
+#cleanBar button{min-height:40px;padding:0 12px;background:rgba(20,21,25,.22);border:1px solid rgba(255,255,255,.12);color:rgba(236,234,230,.6);border-radius:10px;font-size:15px}
+body.clean #cleanBar{display:flex}
 body.clean #panel,body.clean #vtools,body.clean #bonetag,body.clean #hintv{display:none!important}
 body.clean #app{grid-template-columns:minmax(0,1fr)!important;grid-template-rows:minmax(0,1fr)!important}
 #panel{background:var(--panel);border-top:1px solid var(--line);max-height:50vh;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:10px 12px calc(10px + env(safe-area-inset-bottom))}
@@ -100,9 +103,15 @@ body.game #app{grid-template-columns:minmax(0,1fr)!important;grid-template-rows:
 <div id="app">
   <div id="view">
     <div id="bonetag">Кость: <b id="bname">—</b></div>
-    <div id="hintv">тап по телу — выбрать часть<br>палец — вращать камеру · два пальца — зум</div>
-    <div id="vtools"><button id="mvMode">✥ Двигать</button><button id="camFollow" class="on">🎥 Следить</button><button id="gQuick">🎮 Играть</button><button id="breathBtn" class="on">💨 Дыхание</button><button id="feetBtn" class="on">🌫 Дым</button><button id="swordBtn" class="on">🗡 Меч</button><button id="uiHide">👁 Скрыть</button></div>
-    <button id="uiBack">👁 Интерфейс</button>
+    <div id="hintv">тап по телу — выбрать часть<br>палец — вращать · два пальца — зум и сдвиг</div>
+    <div id="vtools">
+      <button id="mvMode">✥<small>Двигать</small></button><button id="camFollow" class="on">🎥<small>Следить</small></button>
+      <button id="camLock">🔒<small>Камера</small></button><button id="camReset">⟲<small>Вид</small></button>
+      <button id="breathBtn" class="on">💨<small>Дыхание</small></button><button id="feetBtn" class="on">🌫<small>Дым</small></button>
+      <button id="swordBtn" class="on">🗡<small>Меч</small></button><button id="uiHide">👁<small>Скрыть</small></button>
+      <button id="gQuick" style="grid-column:span 2">🎮<small>Играть</small></button>
+    </div>
+    <div id="cleanBar"><button id="uiPlay">▶</button><button id="uiBack">👁 Интерфейс</button></div>
     <div id="pad">
       <div id="gTop"><button id="gExit">✕ Выход</button></div>
       <div id="ghint">палец по сцене — камера<br>клавиатура: WASD · пробел — действие 1 · K — действие 2</div>
@@ -317,20 +326,26 @@ let feetOn=ls.get('morgothFeet')!=='0',prevSmoke=0;
 // ---- camera + touch ----
 let yaw=0.5,pitch=0.15,dist=3.6;const target=new THREE.Vector3(0,1.0,0);
 function placeCam(){camera.position.set(target.x+Math.sin(yaw)*Math.cos(pitch)*dist,target.y+Math.sin(pitch)*dist,target.z+Math.cos(yaw)*Math.cos(pitch)*dist);camera.lookAt(target)}
-const ptrs=new Map();let tapStart=null,pinch0=0,dist0=dist;
+const ptrs=new Map();let tapStart=null,pinch0=0,dist0=dist,mid0=null;
+const CAMKEY='morgothCam',camOff=new THREE.Vector3();let camLocked=false;
+try{const c=JSON.parse(localStorage.getItem(CAMKEY)||'null');if(c&&c.locked){camLocked=true;yaw=c.yaw;pitch=c.pitch;dist=c.dist;target.fromArray(c.target)}}catch(e){}
+function saveCam(){try{localStorage.setItem(CAMKEY,JSON.stringify(camLocked?{locked:true,yaw,pitch,dist,target:target.toArray()}:{locked:false}))}catch(e){}}
+function panBy(dx,dy){const k=dist*0.0016,r=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw)),d=r.multiplyScalar(-dx*k);
+  target.x+=d.x;target.z+=d.z;target.y=Math.max(0.1,Math.min(2.6,target.y+dy*k));camOff.x+=d.x;camOff.z+=d.z}
 let moveMode=false,camFollow=true,dragging=null;
 const cv=renderer.domElement;
 cv.addEventListener('pointerdown',e=>{cv.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
   if(ptrs.size===1){tapStart={x:e.clientX,y:e.clientY,t:performance.now()};if(moveMode)startDrag(e)}
-  if(ptrs.size===2){const [a,b]=[...ptrs.values()];pinch0=Math.hypot(a.x-b.x,a.y-b.y);dist0=dist;tapStart=null;endDrag()}});
+  if(ptrs.size===2){const [a,b]=[...ptrs.values()];pinch0=Math.hypot(a.x-b.x,a.y-b.y);dist0=dist;mid0={x:(a.x+b.x)/2,y:(a.y+b.y)/2};tapStart=null;endDrag()}});
 cv.addEventListener('pointermove',e=>{const p=ptrs.get(e.pointerId);if(!p)return;
   if(ptrs.size===1&&dragging)dragTo(e);
-  else if(ptrs.size===1){yaw-=(e.clientX-p.x)*0.008;pitch=Math.max(-0.4,Math.min(1.2,pitch+(e.clientY-p.y)*0.006))}
+  else if(ptrs.size===1&&!camLocked){yaw-=(e.clientX-p.x)*0.008;pitch=Math.max(-0.4,Math.min(1.2,pitch+(e.clientY-p.y)*0.006))}
   p.x=e.clientX;p.y=e.clientY;
-  if(ptrs.size===2){const [a,b]=[...ptrs.values()];const d=Math.hypot(a.x-b.x,a.y-b.y);if(pinch0>0)dist=Math.max(1.2,Math.min(8,dist0*pinch0/d))}});
-const endP=e=>{endDrag();if(tapStart&&ptrs.size===1){const dx=e.clientX-tapStart.x,dy=e.clientY-tapStart.y;if(Math.hypot(dx,dy)<8&&performance.now()-tapStart.t<400)pick(e)}ptrs.delete(e.pointerId);if(ptrs.size<2)pinch0=0;tapStart=null};
+  if(ptrs.size===2&&!camLocked){const [a,b]=[...ptrs.values()];const d=Math.hypot(a.x-b.x,a.y-b.y);if(pinch0>0)dist=Math.max(0.6,Math.min(10,dist0*pinch0/d));
+    const mx=(a.x+b.x)/2,my=(a.y+b.y)/2;if(mid0){panBy(mx-mid0.x,my-mid0.y)}mid0={x:mx,y:my}}});
+const endP=e=>{endDrag();if(tapStart&&ptrs.size===1){const dx=e.clientX-tapStart.x,dy=e.clientY-tapStart.y;if(Math.hypot(dx,dy)<8&&performance.now()-tapStart.t<400)pick(e)}ptrs.delete(e.pointerId);if(ptrs.size<2){pinch0=0;mid0=null}tapStart=null};
 cv.addEventListener('pointerup',endP);cv.addEventListener('pointercancel',e=>{endDrag();ptrs.delete(e.pointerId);tapStart=null});
-cv.addEventListener('wheel',e=>{e.preventDefault();dist=Math.max(1.2,Math.min(8,dist*(1+e.deltaY*0.001)))},{passive:false});
+cv.addEventListener('wheel',e=>{e.preventDefault();if(camLocked)return;dist=Math.max(1.2,Math.min(8,dist*(1+e.deltaY*0.001)))},{passive:false});
 document.addEventListener('gesturestart',e=>e.preventDefault());
 const gRay=new THREE.Raycaster(),gNdc=new THREE.Vector2(),gPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0),gHit=new THREE.Vector3();
 function ndcOf(e,v){const r=cv.getBoundingClientRect();v.set((e.clientX-r.left)/r.width*2-1,-((e.clientY-r.top)/r.height)*2+1);return v}
@@ -519,7 +534,7 @@ function updatePath(){
   pathLine.geometry.dispose();pathLine.geometry=new THREE.BufferGeometry().setAttribute('position',attr);
   pathDots.geometry.dispose();pathDots.geometry=new THREE.BufferGeometry().setAttribute('position',attr.clone());
 }
-const stopPlay=()=>{playing=false;$('play').textContent='▶ Пуск'};
+const stopPlay=()=>{playing=false;$('play').textContent='▶ Пуск';$('uiPlay').textContent='▶'};
 function setAxis(a,v){if(stanceMode)return setStanceAxis(a,v);stopPlay();v=Math.max(-180,Math.min(180,v));const e=work.pose[sel]?[...work.pose[sel]]:[0,0,0];e[a]=v;work.pose[sel]=e;applyPose(work.pose,work.drop);commitEdit();syncUI()}
 for(let a=0;a<3;a++)$('ax'+a).addEventListener('input',e=>setAxis(a,+e.target.value));
 document.querySelectorAll('.ax button[data-a]').forEach(b=>b.addEventListener('click',()=>{const a=+b.dataset.a;const e=(stanceMode?STX[sel]:work.pose[sel])||[0,0,0];setAxis(a,Math.round(e[a])+ +b.dataset.d)}));
@@ -564,11 +579,15 @@ $('swordBtn').classList.toggle('on',swordOn);
 $('swordBtn').onclick=()=>{swordOn=!swordOn;ls.set('morgothSword',swordOn?'1':'0');$('swordBtn').classList.toggle('on',swordOn);if(swordObj)swordObj.visible=swordOn};
 function setClean(on){if(on&&game.on)return;document.body.classList.toggle('clean',on);gizmo.visible=!on&&!game.on;if(on){pathLine.visible=pathDots.visible=false}else updatePath()}
 $('uiHide').onclick=()=>setClean(true);$('uiBack').onclick=()=>setClean(false);
-$('camFollow').onclick=()=>{camFollow=!camFollow;$('camFollow').classList.toggle('on',camFollow);if(!camFollow){target.x=0;target.z=0}};
+$('uiPlay').onclick=()=>$('play').onclick();
+$('camFollow').onclick=()=>{camFollow=!camFollow;$('camFollow').classList.toggle('on',camFollow);if(!camFollow&&!camLocked){target.x=0;target.z=0;camOff.set(0,0,0)}};
+$('camLock').classList.toggle('on',camLocked);
+$('camLock').onclick=()=>{camLocked=!camLocked;$('camLock').classList.toggle('on',camLocked);saveCam();toast(camLocked?'Камера зафиксирована':'Камера свободна')};
+$('camReset').onclick=()=>{camLocked=false;$('camLock').classList.remove('on');yaw=0.5;pitch=0.15;dist=3.6;camOff.set(0,0,0);target.set(player.position.x,1.0,player.position.z);saveCam();toast('Вид по умолчанию')};
 bsel.addEventListener('change',()=>{sel=bsel.value;syncUI()});
 $('bReset').onclick=()=>{if(stanceMode){delete STX[sel];const m=mirrorName(sel);if(stSym&&m!==sel)delete STX[m];saveStance();return}delete work.pose[sel];applyPose(work.pose,work.drop);commitEdit();syncUI()};
 $('time').addEventListener('input',e=>{stopPlay();time=+e.target.value;refresh()});
-$('play').onclick=()=>{if(stanceMode)return;playing=!playing;if(playing&&time>=A.duration-0.01){time=0}$('play').textContent=playing?'❚❚ Пауза':'▶ Пуск'};
+$('play').onclick=()=>{if(stanceMode)return;playing=!playing;if(playing&&time>=A.duration-0.01){time=0}$('uiPlay').textContent=playing?'❚❚':'▶';$('play').textContent=playing?'❚❚ Пауза':'▶ Пуск'};
 $('prev').onclick=()=>{const k=[...A.keys].reverse().find(k=>k.t<time-0.026);time=k?k.t:0;stopPlay();refresh()};
 $('next').onclick=()=>{const k=A.keys.find(k=>k.t>time+0.026);time=k?k.t:A.duration;stopPlay();refresh()};
 $('addKey').onclick=()=>{commitEdit();toast('Ключ на '+time.toFixed(2)+' с')};
@@ -771,7 +790,7 @@ function init(){
     smokeFx.update(dt);
     feetFx.step(dt,feetOn&&!!model,[bones.L_Foot,bones.R_Foot],[bones.L_ToeBase,bones.R_ToeBase]);
     if(bones[sel])bones[sel].getWorldPosition(gizmo.position)
-    if(camFollow||game.on){target.x+=(player.position.x-target.x)*0.12;target.z+=(player.position.z-target.z)*0.12}
+    if(!camLocked&&(camFollow||game.on)){target.x+=(player.position.x+camOff.x-target.x)*0.12;target.z+=(player.position.z+camOff.z-target.z)*0.12}
     sun.position.set(player.position.x+2.5,5,player.position.z+3.5);sun.target.position.set(player.position.x,0.8,player.position.z);
     rim.position.set(player.position.x-1.5,3.2,player.position.z-4);rim.target.position.set(player.position.x,1,player.position.z);
     placeCam();composer.render();
