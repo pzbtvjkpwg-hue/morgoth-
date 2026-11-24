@@ -18,3 +18,11 @@
 Отдельный редактор: https://pzbtvjkpwg-hue.github.io/morgoth-/knight/
 
 - `knight/index.html`, `knight/knight.glb`, `knight/sword.glb`
+
+## Моргот и Рыцарь — общий редактор
+
+https://pzbtvjkpwg-hue.github.io/morgoth-/duo/
+
+На старте выбираешь персонажа. Второй появляется в центре арены в режиме игры и просто стоит. У Моргота есть кнопка «Плащ». Модели исходного качества, без сжатия.
+
+- `duo/index.html`, `duo/morgoth.glb`, `duo/knight.glb`, `duo/sword_morgoth.glb`, `duo/sword_knight.glb`
