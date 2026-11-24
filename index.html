@@ -197,7 +197,7 @@ const BONES=Object.keys(LABEL);
 // finger bones are animated (spell) but not shown in the bone list
 const FINGERS=['R','L'].flatMap(s=>['Index','Mid','Ring','Pinky'].flatMap(f=>[1,2,3].map(i=>s+'_'+f+i)).concat([s+'_Thumb1',s+'_Thumb2']));
 const ANIM_B=[...BONES,...FINGERS];
-const FAX=DATA.fingerAxes||null,FNAME={I:'Index',M:'Mid',R:'Ring',P:'Pinky'},FSPREAD={I:1,M:.3,R:-.3,P:-1};
+let FAX=null;const FNAME={I:'Index',M:'Mid',R:'Ring',P:'Pinky'},FSPREAD={I:1,M:.3,R:-.3,P:-1};
 const emptyHand=()=>({I:0,M:0,R:0,P:0,T:0,S:0});
 // turn a hand's finger settings (curl per finger, thumb, spread) into finger bone rotations in the pose
 function fingersToPose(pose,s,m){if(!FAX)return;const A=FAX[s],v=new THREE.Vector3(),q=new THREE.Quaternion(),q2=new THREE.Quaternion(),e=new THREE.Euler(),R2D=180/Math.PI;
@@ -208,6 +208,7 @@ function fingersToPose(pose,s,m){if(!FAX)return;const A=FAX[s],v=new THREE.Vecto
     put(s+'_'+FNAME[f]+seg,q)}
   for(const [seg,wt] of [[1,.6],[2,1]]){q.setFromAxisAngle(v.fromArray(A.T),(m.T||0)*wt*D2R);put(s+'_Thumb'+seg,q)}}
 const DATA=JSON.parse($('animdata').textContent),STANCE=DATA.stance,WALK=DATA.walk,SPELL=DATA.spell,DASH=DATA.dash;
+FAX=DATA.fingerAxes||null;
 const SCALE=1.8,OFF=[-0.002,0,-0.03],STRIDE=1.3; // metres covered per walk cycle
 const KEY='morgothEditor',PKEY='morgothPresets',MKEY='morgothMode';
 const ls={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v);return true}catch(e){return false}}};
