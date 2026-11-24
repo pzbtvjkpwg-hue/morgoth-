@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Серебряный рыцарь — редактор анимаций</title>
+<style>
+/*
+VOICE: рабочий инструмент аниматора, спокойный и плотный
+IDEA: монтажный стол: сцена сверху, пульт с ползунками снизу
+PICTURE: один персонаж в 3D с тенью на полу, тап по телу выбирает кость
+COLOUR and TYPE: графит #17181c, тлеющий акцент #ff7a2e, системный шрифт
+LAYOUT: портрет: сцена и пульт; альбом: сцена слева, пульт справа
+*/
+:root{color-scheme:dark;--bg:#17181c;--panel:#202227;--line:#33363d;--ink:#eceae6;--dim:#9a9ca3;--acc:#ff7a2e}
+*{box-sizing:border-box;min-width:0;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:15px/1.35 -apple-system,system-ui,sans-serif;overflow:hidden;overscroll-behavior:none}
+#app{position:fixed;inset:0;display:grid;grid-template-rows:minmax(0,1fr) auto;padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left)}
+#view{position:relative;touch-action:none;min-height:0}
+#view canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#bonetag{position:absolute;left:10px;top:8px;background:rgba(0,0,0,.55);border:1px solid var(--line);border-radius:10px;padding:6px 10px;font-size:14px}
+#bonetag b{color:var(--acc)}
+#hintv{position:absolute;left:10px;bottom:10px;font-size:11px;color:var(--dim);opacity:.7;pointer-events:none}
+#vtools{position:absolute;right:calc(6px + env(safe-area-inset-right));bottom:8px;display:grid;grid-template-columns:repeat(2,50px);gap:5px}
+#vtools button{min-height:44px;height:46px;padding:0;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:17px;line-height:1}
+#vtools button small{font:600 9px -apple-system,system-ui,sans-serif;margin-top:2px;opacity:.85}
+#vtools button{background:rgba(20,21,25,.32);border-color:rgba(255,255,255,.12);color:rgba(236,234,230,.8);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+#vtools button.on{background:rgba(255,122,46,.38);border-color:rgba(255,122,46,.55);color:#fff;outline:0}
+#bonetag{opacity:.8}
+#cleanBar{position:absolute;right:calc(10px + env(safe-area-inset-right));top:8px;display:none;gap:6px}
+#cleanBar button{min-height:40px;padding:0 12px;background:rgba(20,21,25,.22);border:1px solid rgba(255,255,255,.12);color:rgba(236,234,230,.6);border-radius:10px;font-size:15px}
+body.clean #cleanBar{display:flex}
+body.clean #panel,body.clean #vtools,body.clean #bonetag,body.clean #hintv{display:none!important}
+body.clean #app{grid-template-columns:minmax(0,1fr)!important;grid-template-rows:minmax(0,1fr)!important}
+#panel{background:var(--panel);border-top:1px solid var(--line);max-height:50vh;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:10px 12px calc(10px + env(safe-area-inset-bottom))}
+.row{display:flex;gap:8px;align-items:center;margin:6px 0;flex-wrap:wrap}
+.row>*{flex:none}
+.grow{flex:1 1 auto!important}
+button,select,input[type=number]{font:600 15px -apple-system,system-ui,sans-serif;color:var(--ink);background:#2c2f36;border:1px solid var(--line);border-radius:10px;min-height:44px;padding:0 12px}
+button:active{background:#3a3e47}
+button:disabled{opacity:.45}
+button.acc{background:var(--acc);border-color:var(--acc);color:#1a1008}
+button.warn{color:#ff8f8f}
+button.on{outline:2px solid var(--acc)}
+select{font-size:16px}
+input[type=number]{width:74px;font-size:16px;padding:0 8px}
+input[type=text]{font:16px -apple-system,system-ui,sans-serif;color:var(--ink);background:#121316;border:1px solid var(--line);border-radius:10px;min-height:44px;padding:0 10px}
+.ax{display:grid;grid-template-columns:5.6em 44px minmax(0,1fr) 44px 3.6em;gap:6px;align-items:center;margin:4px 0}
+.ax label{font-size:13px;color:var(--dim)}
+.ax output{font-variant-numeric:tabular-nums;text-align:right;font-size:14px}
+.ax button{padding:0;font-size:20px}
+input[type=range]{width:100%;height:44px;accent-color:var(--acc)}
+#tl{position:relative;height:44px}
+#tl input{position:absolute;inset:0;margin:0}
+#marks{position:absolute;left:12px;right:12px;top:0;height:10px;pointer-events:none}
+#marks i{position:absolute;top:0;width:10px;height:10px;margin-left:-5px;border-radius:2px;background:var(--dim);transform:rotate(45deg)}
+#marks i.cur{background:var(--acc)}
+.time{font-variant-numeric:tabular-nums;font-size:14px;color:var(--dim);white-space:nowrap}
+h4{margin:14px 0 4px;font-size:13px;color:var(--dim);font-weight:600}
+textarea{width:100%;height:120px;font:12px ui-monospace,monospace;background:#121316;color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:8px}
+details summary{min-height:44px;display:flex;align-items:center;color:var(--dim);font-size:14px}
+.gsel{display:grid;grid-template-columns:5em minmax(0,1fr);gap:8px;align-items:center;margin:6px 0}.gsel label{font-size:13px;color:var(--dim)}
+#frames{display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:2px 0 6px;scroll-snap-type:x proximity}
+#frames button{flex:none;min-width:84px;scroll-snap-align:start}
+#frames button.on{background:var(--acc);border-color:var(--acc);color:#1a1008;outline:0}
+.seg{display:flex;margin:6px 0}.seg button{flex:1;border-radius:0}.seg button:first-child{border-radius:10px 0 0 10px}.seg button:last-child{border-radius:0 10px 10px 0}
+.seg button.on{background:#3a3e47;outline:0;color:var(--acc)}
+body.simple .kOnly{display:none!important}
+.stOnly{display:none!important}
+body.stance .stOnly{display:flex!important}
+body.stance #panel>*:not(.stOK){display:none!important}
+body.stance #stEdit{background:var(--acc);border-color:var(--acc);color:#1a1008}
+.note{font-size:13px;color:var(--dim);margin:2px 0 6px}
+body:not(.simple) .fOnly{display:none!important}
+#pad{position:absolute;inset:0;display:none;pointer-events:none}
+body.game #pad{display:block}
+#pad>*{pointer-events:auto}
+#gTop{position:absolute;left:10px;top:8px;display:flex;gap:8px}
+#gTop button{background:rgba(20,21,25,.75)}
+#joy{position:absolute;left:calc(20px + env(safe-area-inset-left));bottom:calc(28px + env(safe-area-inset-bottom));width:150px;height:150px;border-radius:50%;background:rgba(255,255,255,.07);border:2px solid rgba(255,255,255,.22);touch-action:none}
+#knob{position:absolute;left:50%;top:50%;width:62px;height:62px;margin:-31px 0 0 -31px;border-radius:50%;background:rgba(255,122,46,.85);pointer-events:none;box-shadow:0 2px 10px #0008}
+#atk{position:absolute;right:calc(24px + env(safe-area-inset-right));bottom:calc(40px + env(safe-area-inset-bottom));width:104px;height:104px;border-radius:50%;background:rgba(255,122,46,.92);border:0;color:#1a1008;font-size:36px;display:flex;flex-direction:column;align-items:center;justify-content:center;touch-action:none;box-shadow:0 3px 14px #0009}
+#atk small,#atk2 small{font-size:12px;font-weight:700}
+#atk2{position:absolute;right:calc(34px + env(safe-area-inset-right));bottom:calc(162px + env(safe-area-inset-bottom));width:84px;height:84px;border-radius:50%;background:rgba(40,42,50,.88);border:2px solid rgba(255,122,46,.85);color:var(--ink);font-size:28px;display:flex;flex-direction:column;align-items:center;justify-content:center;touch-action:none;padding:0;box-shadow:0 3px 12px #0008}
+#atk2:active,#atk3:active{transform:scale(.92)}
+#atk3{position:absolute;right:calc(142px + env(safe-area-inset-right));bottom:calc(30px + env(safe-area-inset-bottom));width:84px;height:84px;border-radius:50%;background:rgba(40,42,50,.88);border:2px solid rgba(255,122,46,.85);color:var(--ink);font-size:28px;display:flex;flex-direction:column;align-items:center;justify-content:center;touch-action:none;padding:0;box-shadow:0 3px 12px #0008}
+#atk3 small{font-size:12px;font-weight:700}
+#atk:active{transform:scale(.92)}
+#ghint{position:absolute;right:10px;top:12px;font-size:12px;color:var(--dim);pointer-events:none!important;text-align:right}
+body.game #panel,body.game #vtools,body.game #bonetag,body.game #hintv{display:none!important}
+body.game #app{grid-template-columns:minmax(0,1fr)!important;grid-template-rows:minmax(0,1fr)!important}
+#toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 10px);transform:translateX(-50%);background:#000c;border:1px solid var(--line);padding:8px 14px;border-radius:10px;font-size:14px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:9;text-align:center}
+#load{position:fixed;inset:0;display:grid;place-items:center;background:var(--bg);z-index:10;font-size:16px;padding:20px;text-align:center;white-space:pre-wrap}
+@media (orientation:landscape) and (max-height:520px){
+  #app{grid-template-rows:none;grid-template-columns:minmax(0,1fr) min(400px,46vw)}
+  #panel{max-height:none;border-top:0;border-left:1px solid var(--line)}
+}
+@media (prefers-reduced-motion:reduce){#toast{transition:none}}
+</style>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"}}
+</script>
+</head>
+<body class="simple">
+<div id="app">
+  <div id="view">
+    <div id="bonetag">Кость: <b id="bname">—</b></div>
+    <div id="hintv">тап по телу — выбрать часть<br>палец — вращать · два пальца — зум и сдвиг<br>на компьютере: WASD — сдвиг камеры, колесо — зум</div>
+    <div id="vtools">
+      <button id="camFollow" class="on">🎥<small>Следить</small></button><button id="camLock">🔒<small>Камера</small></button>
+      <button id="camReset">⟲<small>Вид</small></button>
+      <button id="breathBtn" class="on">💨<small>Дыхание</small></button><button id="feetBtn" class="on">🌫<small>Дым</small></button>
+      <button id="swordBtn" class="on">🗡<small>Меч</small></button><button id="uiHide">👁<small>Скрыть</small></button>
+      <button id="gQuick" style="grid-column:span 2">🎮<small>Играть</small></button>
+    </div>
+    <div id="cleanBar"><button id="uiPlay">▶</button><button id="uiBack">👁 Интерфейс</button></div>
+    <div id="pad">
+      <div id="gTop"><button id="gExit">✕ Выход</button></div>
+      <div id="ghint">палец по сцене — камера<br>клавиатура: WASD · пробел — 1 · K — 2 · L — 3</div>
+      <div id="joy"><i id="knob"></i></div>
+      <button id="atk">✦<small id="atkName">ДЕЙСТВИЕ</small></button>
+      <button id="atk2">⚡<small id="atk2Name">РЫВОК</small></button>
+      <button id="atk3">⚔<small id="atk3Name">МЕЧ</small></button>
+    </div>
+  </div>
+  <div id="panel">
+    <div class="row stOK"><button id="stEdit" class="grow">🧍 Базовая стойка</button></div>
+    <div class="note stOnly stOK">Правишь стойку, на которой построены все анимации. Ноль на ползунках — выбранная стойка без твоих правок.</div>
+    <div class="row stOnly stOK"><select id="stSel" class="grow"></select><button id="stApply">Применить</button></div>
+    <div class="row stOnly stOK"><input type="text" id="stName" class="grow" placeholder="Название стойки" maxlength="40"><button id="stSave" class="acc">Сохранить</button></div>
+    <div class="row stOnly stOK"><button id="stSym" class="on">Симметрично</button><button id="stPrev">Показать в ходьбе</button><button id="stDel" class="warn">Удалить</button><button id="stReset" class="grow">Сбросить правки</button></div>
+    <div class="row stOK"><select id="bsel" class="grow"></select><button id="bReset">Сброс</button></div>
+    <div class="ax stOK"><label>Вперёд/назад</label><button data-a="0" data-d="-5">−</button><input type="range" id="ax0" min="-180" max="180" step="1"><button data-a="0" data-d="5">+</button><output id="o0">0°</output></div>
+    <div class="ax stOK"><label>Поворот</label><button data-a="1" data-d="-5">−</button><input type="range" id="ax1" min="-180" max="180" step="1"><button data-a="1" data-d="5">+</button><output id="o1">0°</output></div>
+    <div class="ax stOK"><label>В сторону</label><button data-a="2" data-d="-5">−</button><input type="range" id="ax2" min="-180" max="180" step="1"><button data-a="2" data-d="5">+</button><output id="o2">0°</output></div>
+    <div class="ax"><label>Присед, м</label><button id="dm">−</button><input type="range" id="drop" min="-0.4" max="0.2" step="0.01"><button id="dp">+</button><output id="od">0.00</output></div>
+    <div class="ax"><label>Дым из П руки</label><button id="sm">−</button><input type="range" id="smoke" min="0" max="1" step="0.05"><button id="sp">+</button><output id="osm">0.00</output></div>
+
+    <h4 class="stOK">Пальцы <span class="time">(к стойке; у левой руки в стойке кулак с мечом)</span></h4>
+    <div class="seg stOK"><button id="fhL">Левая рука</button><button id="fhR" class="on">Правая рука</button></div>
+    <div class="row stOK"><select id="fsel" class="grow"><option value="all">Все пальцы</option><option value="T">Большой</option><option value="I">Указательный</option><option value="M">Средний</option><option value="R">Безымянный</option><option value="P">Мизинец</option></select></div>
+    <div class="ax stOK"><label>Сжатие</label><button id="fcm">−</button><input type="range" id="fcurl" min="-110" max="140" step="1"><button id="fcp">+</button><output id="ofc">0°</output></div>
+    <div class="ax stOK"><label>Растопырка</label><button id="fsm">−</button><input type="range" id="fspread" min="-45" max="75" step="1"><button id="fsp">+</button><output id="ofs">0°</output></div>
+    <div class="row stOK"><button id="fFist" class="grow">✊ Кулак</button><button id="fOpen" class="grow">🖐 Раскрыть</button><button id="fRest" class="grow">Как в стойке</button></div>
+
+    <h4>Положение в пространстве</h4>
+    <div class="ax"><label>Влево/вправо</label><button id="pxm">−</button><input type="range" id="px" min="-5" max="5" step="0.01"><button id="pxp">+</button><output id="opx">0.00</output></div>
+    <div class="ax"><label>Вперёд/назад</label><button id="pzm">−</button><input type="range" id="pz" min="-5" max="5" step="0.01"><button id="pzp">+</button><output id="opz">0.00</output></div>
+    <div class="ax"><label>Разворот</label><button id="prm">−</button><input type="range" id="pr" min="-180" max="180" step="1"><button id="prp">+</button><output id="opr">0°</output></div>
+    <div class="row"><button id="posReset" class="grow">Вернуть в центр</button><button id="posPrev" class="grow">Как в прошлом кадре</button></div>
+
+    <div class="seg"><button id="modeF" class="on">Кадры (просто)</button><button id="modeK">Ключи (точно)</button></div>
+    <div class="fOnly">
+      <h4>Кадры</h4>
+      <div id="frames"></div>
+      <div class="row"><button id="fPrev">◀</button><button id="fAdd" class="grow">+ Новый кадр</button><button id="fNext">▶</button></div>
+      <div class="row"><button id="fDel" class="warn grow">Удалить кадр</button><button id="fClear" class="grow">Вернуть стойку</button></div>
+      <div class="row"><span class="time">Между кадрами, с</span><input type="number" id="fStep" min="0.05" max="5" step="0.05" value="0.3"><button id="fEven" class="grow">Выровнять</button></div>
+    </div>
+    <h4 class="kOnly">Таймлайн</h4>
+    <div id="tl" class="kOnly"><input type="range" id="time" min="0" max="2" step="0.01" value="0"><div id="marks"></div></div>
+    <div class="row">
+      <button id="play" class="acc">▶ Пуск</button>
+      <button id="prev" class="kOnly">◀ ключ</button><button id="next" class="kOnly">ключ ▶</button>
+      <span class="time grow" id="tlabel">0.00 / 2.00 с</span>
+    </div>
+    <div class="row kOnly"><button id="addKey" class="grow">+ Ключ здесь</button><button id="delKey" class="warn">Удалить ключ</button></div>
+    <div class="row"><button id="copyKey">Копировать позу</button><button id="pasteKey">Вставить</button><button id="mirror">Зеркало</button></div>
+    <div class="row">
+      <span class="time">Длина, с</span><input type="number" id="dur" min="0.2" max="20" step="0.1" value="2">
+      <span class="time">Скорость</span><select id="speed"><option>0.25</option><option>0.5</option><option selected>1</option><option>2</option></select>
+      <button id="loop">Повтор</button>
+    </div>
+    <div class="row"><button id="useSt" class="on grow">🧍 Со стойкой</button><span class="time">выкл — анимация на исходной стойке, без твоих правок</span></div>
+
+    <h4>Телосложение</h4>
+    <div class="ax"><label>Туловище</label><button data-b="torso" data-d="-0.02">−</button><input type="range" id="b_torso" min="0.65" max="1" step="0.01"><button data-b="torso" data-d="0.02">+</button><output id="o_torso">84%</output></div>
+    <div class="ax"><label>Таз и бёдра</label><button data-b="hips" data-d="-0.02">−</button><input type="range" id="b_hips" min="0.65" max="1" step="0.01"><button data-b="hips" data-d="0.02">+</button><output id="o_hips">84%</output></div>
+    <div class="ax"><label>Вытянутость</label><button data-b="tall" data-d="-0.01">−</button><input type="range" id="b_tall" min="1" max="1.15" step="0.01"><button data-b="tall" data-d="0.01">+</button><output id="o_tall">106%</output></div>
+    <div class="row"><select id="bpsel" class="grow"></select><button id="bpApply">Применить</button></div>
+    <div class="row"><button id="bpSave" class="grow">Сохранить текущее</button><button id="bpDel" class="warn">Удалить</button></div>
+
+    <h4>Пресеты анимаций</h4>
+    <div class="row"><select id="psel" class="grow"></select><button id="pLoad">Открыть</button></div>
+    <div class="row"><input type="text" id="pname" class="grow" placeholder="Название нового пресета" maxlength="40"><button id="pSave" class="acc">Сохранить</button></div>
+    <div class="row"><button id="pOver" class="grow">Перезаписать выбранный</button><button id="pDel" class="warn">Удалить</button></div>
+    <div class="row"><button id="newA" class="grow">Новая анимация (из стойки)</button></div>
+
+    <h4>Опробовать в игре</h4>
+    <div class="gsel"><label>Стойка</label><select id="gIdle"></select></div>
+    <div class="gsel"><label>Ходьба</label><select id="gWalk"></select></div>
+    <div class="gsel"><label>Действие 1</label><select id="gHit"></select></div>
+    <div class="gsel"><label>Действие 2</label><select id="gHit2"></select></div>
+    <div class="gsel"><label>Действие 3</label><select id="gHit3"></select></div>
+    <div class="row"><button id="gStart" class="acc grow">🎮 Играть</button></div>
+
+    <h4>Файл</h4>
+    <div class="row"><button id="exportAll" class="acc grow">📦 Копировать всё (пресеты, стойка, телосложение)</button></div>
+    <details><summary>Экспорт / импорт (JSON)</summary>
+      <div class="row"><button id="doExport" class="grow">Показать JSON</button><button id="doCopy" class="grow">Копировать</button></div>
+      <textarea id="json" placeholder="Вставьте сюда JSON анимации"></textarea>
+      <div class="row"><button id="doImport" class="grow">Загрузить из поля</button></div>
+    </details>
+  </div>
+</div>
+<div id="toast"></div>
+<div id="load">Загрузка модели…</div>
+<script type="application/json" id="animdata">{"stance":{"L_Clavicle":[0.2,5.5,-5.0],"R_Clavicle":[0.2,-5.5,5.0],"L_Upperarm":[12.8,-25.4,9.0],"R_Upperarm":[7.8,25.4,-9.0],"L_Forearm":[2.0,12.0,-4.8],"R_Forearm":[4.0,-6.5,14.6],"L_Hand":[4.4,-9.1,2.4],"R_Hand":[-14.0,-9.0,-12.0],"Spine02":[-5.0,0.0,0.0],"Spine01":[-2.0,0.0,0.0],"Head":[6.0,0.0,0.0],"L_Index1":[-9.1,-1.7,-55.4],"L_Index2":[-11.3,-0.7,-69.3],"L_Index3":[-9.1,-1.7,-55.4],"L_Mid1":[-8.9,-1.1,-55.4],"L_Mid2":[-10.9,0.0,-69.2],"L_Mid3":[-8.9,-1.1,-55.4],"L_Ring1":[-6.8,5.7,-55.0],"L_Ring2":[-7.4,8.0,-68.7],"L_Ring3":[-6.8,5.7,-55.0],"L_Pinky1":[-5.5,9.6,-54.5],"L_Pinky2":[-5.3,12.5,-68.2],"L_Pinky3":[-5.5,9.6,-54.5],"L_Thumb1":[56.1,0.4,20.1],"L_Thumb2":[-0.2,-6.4,-6.3],"L_Thumb3":[-0.1,-5.7,-5.6],"R_Thumb1":[45.6,-7.5,-15.7],"R_Thumb2":[0.5,3.3,3.0],"R_Thumb3":[0.5,2.9,2.7],"R_Index1":[-11.9,6.5,79.7],"R_Index2":[-15.3,5.2,99.7],"R_Index3":[-11.9,6.5,79.7],"R_Mid1":[-9.9,1.8,79.6],"R_Mid2":[-12.0,0.1,99.5],"R_Mid3":[-9.9,1.8,79.6],"R_Ring1":[-7.4,-4.0,79.4],"R_Ring2":[-7.9,-6.2,99.2],"R_Ring3":[-7.4,-4.0,79.4],"R_Pinky1":[-4.2,-11.3,78.8],"R_Pinky2":[-2.6,-14.1,98.9],"R_Pinky3":[-4.2,-11.3,78.8]},"walk":{"name":"Ходьба","duration":1.183,"loop":true,"smooth":false,"keys":[{"t":0.0,"drop":-0.015,"pose":{"Hip":[-8.5,-0.0,0.3],"Waist":[3.1,-1.1,1.1],"Spine01":[6.1,-1.6,-1.3],"Spine02":[6.1,-1.6,-1.3],"NeckTwist01":[-2.9,0.3,-0.6],"Head":[2.0,0.1,3.2],"L_Thigh":[3.3,-3.1,-9.3],"L_Calf":[7.5,1.8,-3.8],"L_Foot":[-5.4,-2.6,3.6],"R_Thigh":[-13.5,9.9,4.2],"R_Calf":[50.9,-0.6,15.8],"R_Foot":[-3.3,0.0,1.2],"L_Upperarm":[-0.4,-2.0,0.0],"L_Forearm":[2.7,0.4,0.0],"R_Upperarm":[1.1,0.7,0.0],"R_Forearm":[5.3,-0.7,0.0]}},{"t":0.099,"drop":-0.018,"pose":{"Hip":[-8.0,0.0,-0.1],"Waist":[3.1,-1.1,1.2],"Spine01":[6.1,-1.9,-0.9],"Spine02":[6.1,-1.9,-0.9],"NeckTwist01":[-2.9,0.3,-0.5],"Head":[1.5,0.5,3.3],"L_Thigh":[5.3,-3.4,-8.8],"L_Calf":[7.8,1.9,-3.8],"L_Foot":[-8.3,-3.2,3.6],"R_Thigh":[-17.3,9.9,4.7],"R_Calf":[39.7,-1.6,13.1],"R_Foot":[-2.3,1.0,2.3],"L_Upperarm":[-2.3,-2.4,0.0],"L_Forearm":[1.2,0.2,0.0],"R_Upperarm":[2.8,-0.0,0.0],"R_Forearm":[5.6,-0.8,0.0]}},{"t":0.197,"drop":-0.029,"pose":{"Hip":[-6.9,-0.0,0.8],"Waist":[3.0,-1.3,0.4],"Spine01":[5.9,-2.6,-0.6],"Spine02":[5.9,-2.5,-0.6],"NeckTwist01":[-3.1,0.4,-0.4],"Head":[1.1,1.0,3.7],"L_Thigh":[14.2,-3.1,-9.5],"L_Calf":[1.6,1.0,-2.6],"L_Foot":[-11.9,-4.5,2.7],"R_Thigh":[-18.8,9.4,3.9],"R_Calf":[6.6,-1.1,4.5],"R_Foot":[1.9,0.1,4.1],"L_Upperarm":[-7.2,-1.5,0.0],"L_Forearm":[-5.1,-0.8,0.0],"R_Upperarm":[5.3,-1.6,0.0],"R_Forearm":[7.6,-1.0,0.0]}},{"t":0.296,"drop":-0.043,"pose":{"Hip":[-6.2,-0.0,2.7],"Waist":[2.8,-1.6,-0.7],"Spine01":[5.7,-3.1,-0.5],"Spine02":[5.7,-3.1,-0.5],"NeckTwist01":[-3.3,0.5,-0.5],"Head":[1.0,1.2,3.3],"L_Thigh":[24.4,-1.5,-10.2],"L_Calf":[-4.1,-0.1,-1.7],"L_Foot":[-8.5,-6.6,0.5],"R_Thigh":[-17.3,8.0,2.5],"R_Calf":[-6.9,0.7,1.3],"R_Foot":[-2.4,-1.9,4.5],"L_Upperarm":[-11.0,0.6,0.0],"L_Forearm":[-10.8,-1.6,0.0],"R_Upperarm":[6.5,-2.5,0.0],"R_Forearm":[8.9,-1.2,0.0]}},{"t":0.394,"drop":-0.038,"pose":{"Hip":[-6.4,-0.0,3.1],"Waist":[2.5,-1.4,-0.9],"Spine01":[5.1,-3.1,-0.3],"Spine02":[5.1,-3.1,-0.3],"NeckTwist01":[-3.3,0.5,-0.8],"Head":[2.7,1.2,2.5],"L_Thigh":[23.8,-0.8,-7.4],"L_Calf":[11.1,1.6,-4.5],"L_Foot":[-1.2,-4.9,-0.1],"R_Thigh":[-15.4,6.9,3.1],"R_Calf":[2.1,-0.5,3.5],"R_Foot":[8.8,-3.2,-0.6],"L_Upperarm":[-9.0,1.7,0.0],"L_Forearm":[-10.8,-1.6,0.0],"R_Upperarm":[5.8,-2.4,0.0],"R_Forearm":[10.0,-1.3,0.0]}},{"t":0.493,"drop":-0.017,"pose":{"Hip":[-6.8,-0.0,2.7],"Waist":[2.6,-0.7,-1.0],"Spine01":[5.2,-2.1,-0.5],"Spine02":[5.2,-2.2,-0.4],"NeckTwist01":[-3.2,0.3,-0.9],"Head":[2.9,0.0,1.8],"L_Thigh":[9.2,-4.0,-5.5],"L_Calf":[42.0,2.5,-11.1],"L_Foot":[7.0,1.6,-1.6],"R_Thigh":[-8.0,6.6,4.9],"R_Calf":[3.4,-0.5,3.8],"R_Foot":[7.6,-2.5,-1.2],"L_Upperarm":[-4.0,0.4,0.0],"L_Forearm":[-5.0,-0.7,0.0],"R_Upperarm":[4.4,-0.2,0.0],"R_Forearm":[7.5,-1.0,0.0]}},{"t":0.592,"drop":-0.005,"pose":{"Hip":[-7.1,-0.0,2.5],"Waist":[2.8,-0.2,-1.3],"Spine01":[5.6,-1.0,-0.8],"Spine02":[5.6,-1.1,-0.7],"NeckTwist01":[-3.2,-0.0,-1.0],"Head":[2.3,-1.5,1.1],"L_Thigh":[-4.9,-6.6,-6.2],"L_Calf":[51.0,2.0,-13.0],"L_Foot":[-1.8,-4.6,-2.6],"R_Thigh":[0.1,5.4,6.3],"R_Calf":[2.8,-0.6,3.6],"R_Foot":[1.1,1.3,-3.1],"L_Upperarm":[-0.2,-0.4,0.0],"L_Forearm":[0.6,0.1,0.0],"R_Upperarm":[1.0,1.6,0.0],"R_Forearm":[2.9,-0.4,0.0]}},{"t":0.69,"drop":-0.011,"pose":{"Hip":[-7.2,-0.0,2.3],"Waist":[3.0,0.2,-1.4],"Spine01":[5.9,0.2,-1.2],"Spine02":[5.9,0.1,-1.0],"NeckTwist01":[-3.3,-0.3,-1.0],"Head":[1.8,-2.9,0.5],"L_Thigh":[-13.6,-3.9,-6.8],"L_Calf":[33.9,2.6,-9.4],"L_Foot":[-6.5,-6.9,-0.9],"R_Thigh":[6.8,5.0,7.0],"R_Calf":[4.1,-1.1,3.9],"R_Foot":[-6.1,4.9,-4.3],"L_Upperarm":[2.6,0.9,0.0],"L_Forearm":[4.2,0.6,0.0],"R_Upperarm":[-3.8,2.2,0.0],"R_Forearm":[-2.6,0.3,0.0]}},{"t":0.789,"drop":-0.027,"pose":{"Hip":[-6.8,-0.0,2.2],"Waist":[2.9,0.5,-1.1],"Spine01":[5.8,1.0,-1.5],"Spine02":[5.8,0.9,-1.3],"NeckTwist01":[-3.5,-0.4,-1.0],"Head":[2.0,-3.3,0.4],"L_Thigh":[-15.2,-4.8,-9.5],"L_Calf":[3.8,1.0,-3.0],"L_Foot":[-4.7,0.1,-1.2],"R_Thigh":[16.4,4.2,7.4],"R_Calf":[-0.5,-0.6,2.9],"R_Foot":[-11.0,8.1,-4.0],"L_Upperarm":[5.3,1.8,0.0],"L_Forearm":[6.9,1.0,0.0],"R_Upperarm":[-6.4,2.2,0.0],"R_Forearm":[-8.6,1.2,0.0]}},{"t":0.887,"drop":-0.046,"pose":{"Hip":[-6.3,-0.0,2.3],"Waist":[2.8,0.9,-0.6],"Spine01":[5.6,1.6,-1.7],"Spine02":[5.6,1.5,-1.7],"NeckTwist01":[-3.6,-0.4,-0.9],"Head":[2.1,-3.4,0.6],"L_Thigh":[-15.9,-3.6,-10.9],"L_Calf":[-5.6,-0.1,-1.3],"L_Foot":[-3.6,2.6,3.5],"R_Thigh":[29.2,2.3,7.5],"R_Calf":[-11.2,1.1,1.0],"R_Foot":[-8.2,10.3,-1.3],"L_Upperarm":[7.4,2.7,0.0],"L_Forearm":[7.5,1.1,0.0],"R_Upperarm":[-7.4,1.2,0.0],"R_Forearm":[-13.2,1.8,0.0]}},{"t":0.986,"drop":-0.037,"pose":{"Hip":[-6.1,-0.0,2.7],"Waist":[2.7,0.6,-0.3],"Spine01":[5.4,1.6,-2.2],"Spine02":[5.4,1.5,-2.2],"NeckTwist01":[-3.6,-0.4,-0.7],"Head":[2.5,-3.0,1.2],"L_Thigh":[-14.0,-3.3,-11.8],"L_Calf":[0.5,0.7,-2.4],"L_Foot":[3.1,6.8,5.4],"R_Thigh":[23.3,4.2,4.8],"R_Calf":[13.8,-1.5,6.5],"R_Foot":[-4.0,5.8,3.0],"L_Upperarm":[7.9,2.7,0.0],"L_Forearm":[7.7,1.2,0.0],"R_Upperarm":[-5.2,0.7,0.0],"R_Forearm":[-12.6,1.7,0.0]}},{"t":1.084,"drop":-0.024,"pose":{"Hip":[-6.3,-0.0,2.4],"Waist":[2.7,-0.1,0.2],"Spine01":[5.3,0.8,-2.5],"Spine02":[5.3,0.8,-2.5],"NeckTwist01":[-3.4,-0.2,-0.7],"Head":[2.6,-2.0,1.8],"L_Thigh":[-8.2,-2.4,-11.9],"L_Calf":[5.6,1.3,-3.4],"L_Foot":[4.2,3.1,3.9],"R_Thigh":[4.7,7.7,2.3],"R_Calf":[51.3,-0.5,15.9],"R_Foot":[3.2,1.9,6.2],"L_Upperarm":[8.1,0.3,0.0],"L_Forearm":[5.1,0.8,0.0],"R_Upperarm":[-2.5,0.6,0.0],"R_Forearm":[-7.4,1.0,0.0]}},{"t":1.183,"drop":-0.015,"pose":{"Hip":[-8.5,-0.0,0.3],"Waist":[3.1,-1.1,1.1],"Spine01":[6.1,-1.6,-1.3],"Spine02":[6.1,-1.6,-1.3],"NeckTwist01":[-2.9,0.3,-0.6],"Head":[2.0,0.1,3.2],"L_Thigh":[3.3,-3.1,-9.3],"L_Calf":[7.5,1.8,-3.8],"L_Foot":[-5.4,-2.6,3.6],"R_Thigh":[-13.5,9.9,4.2],"R_Calf":[50.9,-0.6,15.8],"R_Foot":[-3.3,0.0,1.2],"L_Upperarm":[-0.4,-2.0,0.0],"L_Forearm":[2.7,0.4,0.0],"R_Upperarm":[1.1,0.7,0.0],"R_Forearm":[5.3,-0.7,0.0]}}]},"spell":{"name":"Заклинание","duration":2.5,"loop":false,"keys":[{"t":0,"drop":0,"smoke":0,"pose":{}},{"t":0.42,"drop":-0.035,"smoke":0.45,"pose":{"R_Upperarm":[-38.0,20.0,0.0],"R_Forearm":[-64.0,0.0,0.0],"R_Hand":[-30.0,0.0,0.0],"Spine01":[-2.0,-8.0,0.0],"Spine02":[-4.0,-16.0,0.0],"NeckTwist01":[0.0,6.0,0.0],"Head":[2.0,8.0,0.0],"Hip":[0.0,-6.0,0.0],"L_Thigh":[-6.0,0.0,0.0],"L_Calf":[14.0,0.0,0.0],"R_Thigh":[4.0,0.0,0.0],"R_Calf":[12.0,0.0,0.0],"R_Index1":[-6.4,6.1,49.2],"R_Index2":[-8.6,6.7,61.6],"R_Index3":[-6.4,6.1,49.2],"R_Mid1":[-5.9,2.8,49.3],"R_Mid2":[-7.6,2.6,61.7],"R_Mid3":[-5.9,2.8,49.3],"R_Ring1":[-5.3,-1.2,49.3],"R_Ring2":[-6.4,-2.2,61.5],"R_Ring3":[-5.3,-1.2,49.3],"R_Pinky1":[-4.6,-6.4,48.8],"R_Pinky2":[-4.8,-8.4,61.0],"R_Pinky3":[-4.6,-6.4,48.8],"R_Thumb1":[1.0,11.0,10.1],"R_Thumb2":[0.4,19.7,18.5],"R_Thumb3":[0.6,17.6,16.3]},"fingers":{"R":{"I":62,"M":62,"R":62,"P":62,"T":30,"S":0,"TS":0}}},{"t":0.7,"drop":-0.05,"smoke":0.75,"pose":{"R_Upperarm":[-44.0,22.0,2.0],"R_Forearm":[-74.0,0.0,0.0],"R_Hand":[-36.0,0.0,0.0],"Spine01":[-3.0,-10.0,0.0],"Spine02":[-6.0,-19.0,0.0],"NeckTwist01":[0.0,7.0,0.0],"Head":[3.0,9.0,0.0],"Hip":[0.0,-8.0,0.0],"L_Thigh":[-8.0,0.0,0.0],"L_Calf":[18.0,0.0,0.0],"R_Thigh":[5.0,0.0,0.0],"R_Calf":[15.0,0.0,0.0],"R_Index1":[-8.7,6.7,62.0],"R_Index2":[-11.5,6.6,77.7],"R_Index3":[-8.7,6.7,62.0],"R_Mid1":[-7.6,2.6,62.1],"R_Mid2":[-9.6,1.9,77.6],"R_Mid3":[-7.6,2.6,62.1],"R_Ring1":[-6.4,-2.3,61.9],"R_Ring2":[-7.3,-3.8,77.4],"R_Ring3":[-6.4,-2.3,61.9],"R_Pinky1":[-4.8,-8.5,61.4],"R_Pinky2":[-4.3,-11.0,76.8],"R_Pinky3":[-4.8,-8.5,61.4],"R_Thumb1":[0.9,14.6,13.5],"R_Thumb2":[-1.1,26.2,25.1],"R_Thumb3":[-0.3,23.4,22.1]},"fingers":{"R":{"I":78,"M":78,"R":78,"P":78,"T":40,"S":0,"TS":0}}},{"t":0.86,"drop":-0.06,"smoke":1,"pose":{"Hip":[0.0,8.0,0.0],"Spine01":[5.0,8.0,0.0],"Spine02":[8.0,14.0,0.0],"NeckTwist01":[0.0,-5.0,0.0],"Head":[-6.0,-8.0,0.0],"R_Upperarm":[-88.0,0.0,4.0],"R_Forearm":[-4.0,0.0,0.0],"R_Hand":[55.0,0.0,-70.0],"L_Thigh":[-22.0,0.0,0.0],"L_Calf":[22.0,0.0,0.0],"L_Foot":[4.0,0.0,0.0],"R_Thigh":[14.0,0.0,0.0],"R_Calf":[10.0,0.0,0.0],"R_Foot":[-6.0,0.0,0.0],"R_Index1":[-37.2,-3.7,-87.8],"R_Index2":[-9.7,-14.4,-110.3],"R_Index3":[-5.6,-13.6,-87.7],"R_Mid1":[-10.3,-8.0,-88.4],"R_Mid2":[-3.3,-12.4,-109.9],"R_Mid3":[-0.7,-10.8,-87.5],"R_Ring1":[14.9,-10.0,-85.7],"R_Ring2":[4.3,-9.8,-109.3],"R_Ring3":[5.2,-7.5,-87.3],"R_Pinky1":[45.0,-9.2,-79.2],"R_Pinky2":[14.0,-6.3,-108.5],"R_Pinky3":[12.7,-3.0,-86.9],"R_Thumb1":[-65.0,-8.4,19.5],"R_Thumb2":[-1.2,-5.2,-4.9],"R_Thumb3":[-1.0,-4.6,-4.4]},"fingers":{"R":{"I":-110,"M":-110,"R":-110,"P":-110,"T":-8,"S":-33,"TS":70}},"pos":[0,0],"rot":0},{"t":1.55,"drop":-0.065,"smoke":1,"pose":{"Hip":[0.0,8.0,0.0],"Spine01":[6.0,9.0,0.0],"Spine02":[9.0,15.0,0.0],"NeckTwist01":[0.0,-5.0,0.0],"Head":[-7.0,-9.0,0.0],"R_Upperarm":[-93.0,0.0,3.0],"R_Forearm":[-2.0,0.0,0.0],"R_Hand":[65.0,35.0,-55.0],"L_Thigh":[-22.0,0.0,0.0],"L_Calf":[24.0,0.0,0.0],"L_Foot":[4.0,0.0,0.0],"R_Thigh":[14.0,0.0,0.0],"R_Calf":[12.0,0.0,0.0],"R_Foot":[-6.0,0.0,0.0],"R_Index1":[2.2,-15.8,-86.8],"R_Index2":[-9.7,-14.4,-110.3],"R_Index3":[-5.6,-13.6,-87.7],"R_Mid1":[1.6,-11.5,-87.2],"R_Mid2":[-3.3,-12.4,-109.9],"R_Mid3":[-0.7,-10.8,-87.5],"R_Ring1":[2.9,-6.8,-87.6],"R_Ring2":[4.3,-9.8,-109.3],"R_Ring3":[5.2,-7.5,-87.3],"R_Pinky1":[5.0,-1.0,-88.1],"R_Pinky2":[14.0,-6.3,-108.5],"R_Pinky3":[12.7,-3.0,-86.9],"R_Thumb1":[-9.8,-2.1,0.6],"R_Thumb2":[-1.2,-5.2,-4.9],"R_Thumb3":[-1.0,-4.6,-4.4]},"fingers":{"R":{"I":-110,"M":-110,"R":-110,"P":-110,"T":-8,"S":8,"TS":10}},"pos":[0,0],"rot":0},{"t":1.95,"drop":-0.03,"smoke":0.35,"pose":{"R_Upperarm":[-40.0,0.0,8.0],"R_Forearm":[-30.0,0.0,0.0],"R_Hand":[10.0,0.0,0.0],"Spine01":[2.0,3.0,0.0],"Spine02":[3.0,5.0,0.0],"Head":[-2.0,-3.0,0.0],"Hip":[0.0,3.0,0.0],"L_Thigh":[-10.0,0.0,0.0],"L_Calf":[12.0,0.0,0.0],"R_Thigh":[6.0,0.0,0.0],"R_Calf":[8.0,0.0,0.0],"R_Index1":[-1.9,3.1,19.7],"R_Index2":[-2.5,3.8,24.7],"R_Index3":[-1.9,3.1,19.7],"R_Mid1":[-2.1,1.7,19.8],"R_Mid2":[-2.7,2.1,24.8],"R_Mid3":[-2.1,1.7,19.8],"R_Ring1":[-2.3,0.1,19.9],"R_Ring2":[-2.8,-0.0,24.8],"R_Ring3":[-2.3,0.1,19.9],"R_Pinky1":[-2.5,-2.1,19.7],"R_Pinky2":[-3.0,-2.7,24.6],"R_Pinky3":[-2.5,-2.1,19.7],"R_Thumb1":[0.5,3.6,3.4],"R_Thumb2":[0.8,6.6,6.1],"R_Thumb3":[0.8,5.8,5.4]},"fingers":{"R":{"I":25,"M":25,"R":25,"P":25,"T":10,"S":0,"TS":0}}},{"t":2.5,"drop":0,"smoke":0,"pose":{}}]},"dash":{"name":"Рывок вперёд","duration":1.1,"loop":false,"keys":[{"t":0,"drop":0,"smoke":0,"pose":{},"pos":[0,0],"rot":0},{"t":0.2,"drop":-0.07,"smoke":0,"pose":{"Hip":[6.0,0.0,0.0],"Spine01":[8.0,0.0,0.0],"Spine02":[8.0,0.0,0.0],"Head":[-10.0,0.0,0.0],"L_Upperarm":[3.0,0.0,5.0],"L_Forearm":[-22.0,0.0,0.0],"R_Upperarm":[8.0,0.0,-10.0],"R_Forearm":[-22.0,0.0,0.0],"L_Thigh":[-28.0,0.0,0.0],"L_Calf":[50.0,0.0,0.0],"L_Foot":[-18.0,0.0,0.0],"R_Thigh":[-22.0,0.0,0.0],"R_Calf":[46.0,0.0,0.0],"R_Foot":[-20.0,0.0,0.0],"R_Index1":[14.0,-17.4,-73.7],"R_Index2":[-7.0,-14.0,-95.9],"R_Index3":[-3.8,-12.5,-76.3],"R_Mid1":[5.6,-11.2,-75.6],"R_Mid2":[-1.6,-11.5,-95.6],"R_Mid3":[0.3,-9.7,-76.3],"R_Ring1":[0.0,-4.7,-76.8],"R_Ring2":[5.0,-8.3,-95.3],"R_Ring3":[5.3,-6.2,-76.2],"R_Pinky1":[-5.6,3.3,-78.2],"R_Pinky2":[13.3,-4.2,-94.7],"R_Pinky3":[11.5,-1.6,-75.9]},"pos":[0,-0.06],"rot":0,"fingers":{"R":{"I":-96,"M":-96,"R":-96,"P":-96,"T":0,"S":18,"TS":0}}},{"t":0.38,"drop":-0.05,"smoke":0,"pose":{"Hip":[20.0,0.0,0.0],"Spine01":[10.0,0.0,0.0],"Spine02":[8.0,0.0,0.0],"Head":[-26.0,0.0,0.0],"L_Upperarm":[48.0,0.0,0.0],"L_Forearm":[-12.0,0.0,0.0],"R_Upperarm":[-72.0,10.0,-5.0],"R_Forearm":[-12.0,45.0,0.0],"L_Thigh":[-58.0,0.0,0.0],"L_Calf":[62.0,0.0,0.0],"L_Foot":[-10.0,0.0,0.0],"R_Thigh":[28.0,0.0,0.0],"R_Calf":[22.0,0.0,0.0],"R_Foot":[25.0,0.0,0.0],"R_Hand":[-10.0,-20.0,-10.0],"R_Index1":[-4.4,-12.9,-80.3],"R_Index2":[-8.0,-14.3,-101.0],"R_Index3":[-4.4,-12.9,-80.3],"R_Mid1":[-0.0,-10.1,-80.3],"R_Mid2":[-2.2,-11.9,-100.7],"R_Mid3":[-0.0,-10.1,-80.3],"R_Ring1":[5.3,-6.6,-80.1],"R_Ring2":[4.8,-8.9,-100.3],"R_Ring3":[5.3,-6.6,-80.1],"R_Pinky1":[12.0,-2.1,-79.8],"R_Pinky2":[13.6,-4.9,-99.6],"R_Pinky3":[12.0,-2.1,-79.8],"R_Thumb1":[-44.3,-3.8,12.1],"R_Thumb2":[-1.5,-6.4,-6.2],"R_Thumb3":[-1.3,-5.7,-5.5]},"pos":[0,1],"rot":0,"fingers":{"R":{"I":-101,"M":-101,"R":-101,"P":-101,"T":-10,"S":0,"TS":47}}},{"t":1.1,"drop":0,"smoke":0,"pose":{},"pos":[0,1.8],"rot":0}]},"slash":{"name":"Удар мечом","duration":1.45,"loop":false,"keys":[{"t":0,"drop":0,"smoke":0,"pose":{}},{"t":0.36,"drop":-0.02,"smoke":0,"pose":{"Hip":[0.0,8.0,0.0],"Spine01":[-2.0,10.0,0.0],"Spine02":[-4.0,16.0,0.0],"NeckTwist01":[0.0,-6.0,0.0],"Head":[12.0,-15.0,0.0],"L_Upperarm":[-74.7,-5.6,34.0],"L_Forearm":[-95.2,-8.4,0.0],"L_Hand":[-28.0,38.0,-28.8],"R_Upperarm":[-20.0,0.0,-8.0],"R_Forearm":[-30.0,0.0,0.0],"L_Thigh":[4.0,0.0,0.0],"L_Calf":[10.0,0.0,0.0],"R_Thigh":[-10.0,0.0,0.0],"R_Calf":[18.0,0.0,0.0],"R_Index1":[9.0,-15.1,-68.2],"R_Index2":[-5.6,-13.6,-87.7],"R_Index3":[-2.8,-11.8,-69.8],"R_Mid1":[4.3,-9.9,-69.4],"R_Mid2":[-0.7,-10.8,-87.5],"R_Mid3":[0.8,-9.0,-69.8],"R_Ring1":[1.7,-4.5,-70.3],"R_Ring2":[5.2,-7.5,-87.3],"R_Ring3":[5.2,-5.5,-69.8],"R_Pinky1":[-0.7,2.3,-71.2],"R_Pinky2":[12.7,-3.0,-86.9],"R_Pinky3":[10.8,-0.9,-69.6],"R_Thumb1":[-9.8,-2.1,0.6],"R_Thumb2":[-1.2,-5.2,-4.9],"R_Thumb3":[-1.0,-4.6,-4.4]},"fingers":{"R":{"I":-88,"M":-88,"R":-88,"P":-88,"T":-8,"S":12,"TS":10}},"pos":[0,0],"rot":0},{"t":0.5,"drop":-0.03,"smoke":0,"pose":{"Hip":[0.0,8.0,0.0],"Spine01":[-2.0,17.0,0.0],"Spine02":[-4.0,20.0,0.0],"NeckTwist01":[0.0,-6.0,0.0],"Head":[12.0,-15.0,0.0],"L_Upperarm":[-80.7,-5.6,34.0],"L_Forearm":[-95.2,-8.4,0.0],"L_Hand":[-28.0,38.0,-28.8],"R_Upperarm":[-20.0,0.0,-8.0],"R_Forearm":[-30.0,0.0,0.0],"L_Thigh":[4.0,0.0,0.0],"L_Calf":[10.0,0.0,0.0],"R_Thigh":[-10.0,0.0,0.0],"R_Calf":[16.0,0.0,0.0],"R_Index1":[4.6,-15.4,-78.5],"R_Index2":[-7.8,-14.2,-100.0],"R_Index3":[-4.3,-12.9,-79.5],"R_Mid1":[2.7,-10.8,-79.1],"R_Mid2":[-2.1,-11.8,-99.7],"R_Mid3":[0.0,-10.0,-79.5],"R_Ring1":[2.7,-5.8,-79.7],"R_Ring2":[4.8,-8.8,-99.3],"R_Ring3":[5.3,-6.6,-79.3],"R_Pinky1":[3.3,0.4,-80.4],"R_Pinky2":[13.6,-4.8,-98.7],"R_Pinky3":[11.9,-2.0,-79.0],"R_Thumb1":[-9.8,-2.1,0.6],"R_Thumb2":[-1.2,-5.2,-4.9],"R_Thumb3":[-1.0,-4.6,-4.4]},"fingers":{"R":{"I":-100,"M":-100,"R":-100,"P":-100,"T":-8,"S":9,"TS":10}},"pos":[0,0],"rot":0},{"t":0.63,"drop":-0.07,"smoke":0,"pose":{"Hip":[0.0,-10.0,0.0],"Spine01":[13.0,-12.0,0.0],"Spine02":[10.0,-20.0,0.0],"NeckTwist01":[0.0,8.0,0.0],"Head":[-5.0,27.0,0.0],"L_Upperarm":[-38.0,-31.5,12.4],"L_Forearm":[-4.0,3.0,0.0],"L_Hand":[-15.0,34.0,-27.0],"R_Upperarm":[20.0,0.0,-6.0],"R_Forearm":[-25.0,0.0,0.0],"L_Thigh":[-30.0,0.0,0.0],"L_Calf":[30.0,0.0,0.0],"L_Foot":[6.0,0.0,0.0],"R_Thigh":[14.0,0.0,0.0],"R_Calf":[14.0,0.0,0.0]},"fingers":{"R":{"I":0,"M":0,"R":0,"P":0,"T":0,"S":0,"TS":0}},"pos":[0,0],"rot":0},{"t":0.75,"drop":-0.08,"smoke":0,"pose":{"Hip":[0.0,-14.0,0.0],"Spine01":[10.0,-18.0,0.0],"Spine02":[12.0,-26.0,0.0],"NeckTwist01":[0.0,10.0,0.0],"Head":[3.0,31.0,0.0],"L_Upperarm":[-21.0,-20.0,8.0],"L_Forearm":[-44.0,41.0,0.0],"L_Hand":[7.0,3.0,-3.5],"R_Upperarm":[25.0,0.0,-6.0],"R_Forearm":[-25.0,0.0,0.0],"L_Thigh":[-30.0,0.0,0.0],"L_Calf":[34.0,0.0,0.0],"L_Foot":[6.0,0.0,0.0],"R_Thigh":[14.0,0.0,0.0],"R_Calf":[18.0,0.0,0.0]},"fingers":{},"pos":[0,0],"rot":0},{"t":1.45,"drop":0,"smoke":0,"pose":{"Head":[5.0,0.0,0.0]},"fingers":{},"pos":[0,0],"rot":0}]},"fingerAxes":{"L":{"palm":[-0.97244,-0.17694,0.15183],"I":[-0.13447,-0.10634,-0.9852],"M":[-0.13679,-0.09437,-0.9861],"R":[-0.16064,0.03651,-0.98634],"P":[-0.17316,0.11208,-0.97849],"T":[0.01971,-0.71127,-0.70264],"TA":[0.93906,-0.07546,0.33538],"TC":[0.01971,-0.71127,-0.70264]},"R":{"palm":[0.95349,-0.27924,0.11351],"I":[-0.06696,0.17096,0.983],"M":[-0.08742,0.10423,0.9907],"R":[-0.1116,0.0228,0.99349],"P":[-0.14137,-0.08169,0.98658],"T":[0.13076,0.72249,0.67891],"TA":[0.92539,-0.06494,-0.37341],"TC":[0.13076,0.72249,0.67891]}},"sword":{"local":[-0.082948,0.543556,-0.012923,0.0,0.522958,0.083337,0.148559,0.0,0.148777,0.010118,-0.529399,0.0,-0.085072,0.04358,-0.037533,1.0]},"stride":1.495}</script>
+<script>
+addEventListener('error',e=>{const l=document.getElementById('load');l.style.display='grid';l.textContent='Ошибка: '+(e.message||e)});
+</script>
+<script type="module">
+import * as THREE from 'three';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
+import {EffectComposer} from 'three/addons/postprocessing/EffectComposer.js';
+import {RenderPass} from 'three/addons/postprocessing/RenderPass.js';
+import {UnrealBloomPass} from 'three/addons/postprocessing/UnrealBloomPass.js';
+import {ShaderPass} from 'three/addons/postprocessing/ShaderPass.js';
+import {OutputPass} from 'three/addons/postprocessing/OutputPass.js';
+{
+const $=id=>document.getElementById(id);
+const LABEL={Hip:'Корпус целиком',Pelvis:'Таз',Waist:'Поясница',Spine01:'Спина',Spine02:'Грудь',NeckTwist01:'Шея',Head:'Голова',
+ L_Clavicle:'Л ключица',L_Upperarm:'Л плечо',L_Forearm:'Л предплечье',L_Hand:'Л кисть',
+ R_Clavicle:'П ключица',R_Upperarm:'П плечо',R_Forearm:'П предплечье',R_Hand:'П кисть',
+ L_Thigh:'Л бедро',L_Calf:'Л голень',L_Foot:'Л стопа',R_Thigh:'П бедро',R_Calf:'П голень',R_Foot:'П стопа'};
+const BONES=Object.keys(LABEL);
+// finger bones are animated (spell) but not shown in the bone list
+const FINGERS=['R','L'].flatMap(s=>['Index','Mid','Ring','Pinky'].flatMap(f=>[1,2,3].map(i=>s+'_'+f+i)).concat([s+'_Thumb1',s+'_Thumb2',s+'_Thumb3']));
+const ANIM_B=[...BONES,...FINGERS];
+let FAX=null;const FNAME={I:'Index',M:'Mid',R:'Ring',P:'Pinky'},FSPREAD={I:1,M:.3,R:-.3,P:-1};
+const emptyHand=()=>({I:0,M:0,R:0,P:0,T:0,S:0,TS:0});
+// turn a hand's finger settings (curl per finger, thumb, spread) into finger bone rotations in the pose
+function fingersToPose(pose,s,m){if(!FAX)return;const A=FAX[s],v=new THREE.Vector3(),q=new THREE.Quaternion(),q2=new THREE.Quaternion(),e=new THREE.Euler(),R2D=180/Math.PI;
+  const put=(bone,quat)=>{e.setFromQuaternion(quat,'XYZ');const a=[e.x*R2D,e.y*R2D,e.z*R2D].map(x=>Math.round(x*10)/10);if(a.every(x=>x===0))delete pose[bone];else pose[bone]=a};
+  for(const f of ['I','M','R','P'])for(const [seg,wt] of [[1,.8],[2,1],[3,.8]]){
+    q.setFromAxisAngle(v.fromArray(A[f]),(m[f]||0)*wt*D2R);
+    if(seg===1&&m.S)q.premultiply(q2.setFromAxisAngle(v.fromArray(A.palm),m.S*FSPREAD[f]*D2R));
+    put(s+'_'+FNAME[f]+seg,q)}
+  // thumb: curl toward the palm over three joints; TS swings it away from (+) or toward (−) the index finger
+  const TC=A.TC||A.T,TA=A.TA;
+  for(const [seg,wt] of [[1,.5],[2,.9],[3,.8]]){q.setFromAxisAngle(v.fromArray(TC),(m.T||0)*wt*D2R);if(seg===1&&TA&&m.TS)q.multiply(q2.setFromAxisAngle(v.fromArray(TA),-m.TS*D2R));put(s+'_Thumb'+seg,q)}}
+const DATA=JSON.parse($('animdata').textContent),STANCE=DATA.stance,WALK=DATA.walk,SPELL=DATA.spell,DASH=DATA.dash,SLASH=DATA.slash;
+FAX=DATA.fingerAxes||null;
+const SCALE=1.9,OFF=[-0.004,0,0],STRIDE=1.495; // metres covered per walk cycle
+const KEY='knightEditor',PKEY='knightPresets',MKEY='knightMode';
+const ls={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v);return true}catch(e){return false}}};
+const D2R=Math.PI/180;
+
+// ---- scene ----
+const view=$('view');
+const renderer=new THREE.WebGLRenderer({antialias:true});
+const DPR=Math.min(devicePixelRatio,2);renderer.setPixelRatio(DPR);renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+view.prepend(renderer.domElement);
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x1c1e24);scene.fog=new THREE.Fog(0x1c1e24,8,20);
+scene.environment=new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(),0.04).texture;scene.environmentIntensity=0.55;
+const camera=new THREE.PerspectiveCamera(40,1,0.05,100);
+scene.add(new THREE.HemisphereLight(0xc9d2e6,0x3a3028,1.1));
+const sun=new THREE.DirectionalLight(0xffdcb4,3.4);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);
+Object.assign(sun.shadow.camera,{left:-2,right:2,top:2.6,bottom:-1,near:0.5,far:14});sun.shadow.camera.updateProjectionMatrix();sun.shadow.bias=-0.0004;sun.shadow.normalBias=0.02;
+scene.add(sun,sun.target);
+const fill=new THREE.DirectionalLight(0x9fb2ff,0.9);fill.position.set(-3,2,1);scene.add(fill);
+const rim=new THREE.DirectionalLight(0xb8c8ff,3.2);scene.add(rim,rim.target);
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(40,40),new THREE.MeshStandardMaterial({color:0x23252b,roughness:.9,metalness:0}));ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
+const grid=new THREE.GridHelper(12,48,0x5c616b,0x34373e);grid.position.y=0.002;scene.add(grid);
+const player=new THREE.Group();scene.add(player);
+const gizmo=new THREE.Mesh(new THREE.SphereGeometry(0.035,16,12),new THREE.MeshBasicMaterial({color:0xff7a2e,depthTest:false,transparent:true,opacity:.9}));gizmo.renderOrder=9;scene.add(gizmo);
+const pathLine=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:0xff7a2e,transparent:true,opacity:.8}));scene.add(pathLine);
+const pathDots=new THREE.Points(new THREE.BufferGeometry(),new THREE.PointsMaterial({color:0xff7a2e,size:0.09}));scene.add(pathDots);
+// ---- post: bloom for the eyes, gentle grade + sharpen for detail ----
+const composer=new EffectComposer(renderer,new THREE.WebGLRenderTarget(4,4,{type:THREE.HalfFloatType,samples:4}));
+composer.addPass(new RenderPass(scene,camera));
+const bloom=new UnrealBloomPass(new THREE.Vector2(256,256),0.4,0.3,1.0);composer.addPass(bloom);
+composer.addPass(new OutputPass());
+const grade=new ShaderPass({uniforms:{tDiffuse:{value:null},res:{value:new THREE.Vector2(1,1)},sharp:{value:0.35},contrast:{value:1.08},sat:{value:1.1},vig:{value:0.32}},
+ vertexShader:'varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
+ fragmentShader:`uniform sampler2D tDiffuse;uniform vec2 res;uniform float sharp,contrast,sat,vig;varying vec2 vUv;
+ void main(){vec2 px=1.0/res;vec3 c=texture2D(tDiffuse,vUv).rgb;
+  vec3 b=(texture2D(tDiffuse,vUv+vec2(px.x,0.)).rgb+texture2D(tDiffuse,vUv-vec2(px.x,0.)).rgb+texture2D(tDiffuse,vUv+vec2(0.,px.y)).rgb+texture2D(tDiffuse,vUv-vec2(0.,px.y)).rgb)*0.25;
+  c=c+(c-b)*sharp*2.0;
+  float l=dot(c,vec3(0.2126,0.7152,0.0722));c=mix(vec3(l),c,sat);
+  c=(c-0.5)*contrast+0.5;
+  c*=mix(vec3(0.97,0.99,1.05),vec3(1.04,1.0,0.95),smoothstep(0.15,0.75,l));
+  vec2 d=vUv-0.5;c*=1.0-vig*dot(d,d)*2.2;
+  gl_FragColor=vec4(clamp(c,0.,1.),1.0);}`});
+composer.addPass(grade);
+function resize(){const r=view.getBoundingClientRect(),w=Math.max(1,r.width),h=Math.max(1,r.height);renderer.setSize(w,h,false);composer.setPixelRatio(DPR);composer.setSize(w,h);grade.uniforms.res.value.set(w*DPR,h*DPR);camera.aspect=w/h;camera.updateProjectionMatrix()}
+new ResizeObserver(resize).observe(view);
+
+// ---- black smoke: hands (always a little, a lot during the spell) and feet (trail) ----
+const smokeTex=(()=>{const c=document.createElement('canvas');c.width=c.height=128;const g=c.getContext('2d');
+  for(let i=0;i<8;i++){const x=34+Math.random()*60,y=34+Math.random()*60,r=24+Math.random()*26;const gr=g.createRadialGradient(x,y,0,x,y,r);gr.addColorStop(0,'rgba(255,255,255,.55)');gr.addColorStop(1,'rgba(255,255,255,0)');g.fillStyle=gr;g.fillRect(0,0,128,128)}
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t})();
+function makePool(n,color){const pool=[],grp=new THREE.Group();scene.add(grp);
+  for(let i=0;i<n;i++){const s=new THREE.Sprite(new THREE.SpriteMaterial({map:smokeTex,color,transparent:true,depthWrite:false,opacity:0,fog:true}));s.visible=false;grp.add(s);pool.push({s,life:0,max:1,v:new THREE.Vector3(),size:.1,grow:3,peak:.6,drag:1,rise:.1,spin:0})}
+  let next=0;
+  return{take(){const p=pool[next];next=(next+1)%n;p.life=0;p.s.visible=true;p.s.material.rotation=Math.random()*6.28;p.spin=(Math.random()-.5)*1.4;return p},
+    update(dt){for(const p of pool){if(!p.s.visible)continue;p.life+=dt;const k=p.life/p.max;if(k>=1){p.s.visible=false;continue}
+      p.v.multiplyScalar(Math.max(0,1-dt*p.drag));p.v.y+=dt*p.rise;p.v.x+=Math.sin(p.life*3+p.spin*7)*dt*0.12;p.s.position.addScaledVector(p.v,dt);
+      const sz=p.size*(1+k*p.grow);p.s.scale.set(sz,sz,sz);p.s.material.rotation+=p.spin*dt;p.s.material.opacity=Math.min(1,k*6)*(1-k)*p.peak}},
+    clear(){for(const p of pool)p.s.visible=false}}}
+const smokeFx=(()=>{
+  const P=makePool(460,0x0a080d),acc={},hp=new THREE.Vector3(),ep=new THREE.Vector3(),dir=new THREE.Vector3();
+  const rnd=s=>(Math.random()-.5)*s;
+  function where(hand,fore){hand.getWorldPosition(hp);if(fore){fore.getWorldPosition(ep);dir.copy(hp).sub(ep).normalize()}else dir.set(0,1,0);hp.addScaledVector(dir,0.07)}
+  function spawn(kind){const p=P.take();p.s.position.copy(hp).add(new THREE.Vector3(rnd(.06),rnd(.06),rnd(.06)));
+    if(kind===0){p.max=0.9+Math.random()*0.7;p.size=0.035+Math.random()*0.03;p.grow=3;p.peak=0.45;p.drag=1.5;p.rise=0.15;p.v.set(rnd(.12),0.1+Math.random()*0.15,rnd(.12)).addScaledVector(dir,0.05)}
+    else if(kind===1){p.max=1.3+Math.random()*1.1;p.size=0.07+Math.random()*0.08;p.grow=5;p.peak=0.8;p.drag=1.1;p.rise=0.18;p.v.set(rnd(.35),0.2+Math.random()*0.3,rnd(.35)).addScaledVector(dir,0.2+Math.random()*0.3)}
+    else{p.max=1.2+Math.random()*0.9;p.size=0.09+Math.random()*0.09;p.grow=5.5;p.peak=0.85;p.drag=1.8;p.rise=0.12;p.v.copy(dir).multiplyScalar(0.9+Math.random()*0.8).add(new THREE.Vector3(rnd(.6),rnd(.4)+0.1,rnd(.6)))}}
+  return{
+    emit(key,perSec,dt,hand,fore,big){if(!hand||perSec<=0){acc[key]=0;return}where(hand,fore);acc[key]=(acc[key]||0)+perSec*dt;while(acc[key]>=1){acc[key]-=1;spawn(big?1:0)}},
+    burst(hand,fore,n){if(!hand)return;where(hand,fore);for(let i=0;i<n;i++)spawn(2)},
+    update:P.update,clear:P.clear};
+})();
+const feetFx=(()=>{
+  const P=makePool(220,0x060507),acc=[0,0],fp=new THREE.Vector3(),tp=new THREE.Vector3(),last=new THREE.Vector3(),mv=new THREE.Vector3();let speed=0,init=false;
+  function puff(pos,move,long){const p=P.take();p.max=(long?2.0:1.2)+Math.random()*0.9;p.size=0.06+Math.random()*0.06;p.grow=3.2;p.peak=0.45;p.drag=1.2;p.rise=0.02;
+    const a=Math.random()*6.283,sp=0.04+Math.random()*0.12;p.v.set(Math.cos(a)*sp,0.03+Math.random()*0.08,Math.sin(a)*sp).addScaledVector(move,-0.1);
+    p.s.position.set(pos.x+(Math.random()-.5)*0.08,Math.max(0.03,pos.y*0.5)+Math.random()*0.03,pos.z+(Math.random()-.5)*0.08)}
+  function step(dt,on,feet,toes){
+    player.getWorldPosition(fp);if(!init){last.copy(fp);init=true}
+    mv.copy(fp).sub(last);last.copy(fp);const v=dt>0?mv.length()/dt:0;speed+=(Math.min(v,6)-speed)*Math.min(1,dt*6);mv.y=0;if(mv.lengthSq()>1e-8)mv.normalize();
+    if(on&&feet[0]){for(let i=0;i<2;i++){const f=feet[i],to=toes[i];if(!f)continue;f.getWorldPosition(fp);if(to){to.getWorldPosition(tp);fp.lerp(tp,Math.random())}
+      acc[i]+=(3+speed*14)*dt;while(acc[i]>=1){acc[i]-=1;puff(fp,mv,speed>0.3)}}}
+    else{acc[0]=acc[1]=0}
+    P.update(dt)}
+  return{step,clear:P.clear};
+})();
+let feetOn=ls.get('knightFeet')!=='0',prevSmoke=0;
+
+// ---- camera + touch ----
+let yaw=0.5,pitch=0.15,dist=3.6;const target=new THREE.Vector3(0,1.0,0);
+function placeCam(){camera.position.set(target.x+Math.sin(yaw)*Math.cos(pitch)*dist,target.y+Math.sin(pitch)*dist,target.z+Math.cos(yaw)*Math.cos(pitch)*dist);camera.lookAt(target)}
+const ptrs=new Map();let tapStart=null,pinch0=0,dist0=dist,mid0=null;
+const CAMKEY='knightCam',camOff=new THREE.Vector3();let camLocked=false;
+try{const c=JSON.parse(localStorage.getItem(CAMKEY)||'null');if(c&&c.locked){camLocked=true;yaw=c.yaw;pitch=c.pitch;dist=c.dist;target.fromArray(c.target)}}catch(e){}
+function saveCam(){try{localStorage.setItem(CAMKEY,JSON.stringify(camLocked?{locked:true,yaw,pitch,dist,target:target.toArray()}:{locked:false}))}catch(e){}}
+const edKeys={};
+addEventListener('keydown',e=>{if(game.on||/INPUT|TEXTAREA|SELECT/.test((e.target&&e.target.tagName)||''))return;if(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)){edKeys[e.code]=true;e.preventDefault()}});
+addEventListener('keyup',e=>{delete edKeys[e.code]});addEventListener('blur',()=>{for(const k in edKeys)delete edKeys[k]});
+function keyPan(dt){if(game.on||camLocked)return;const s=520*dt,x=((edKeys.KeyD||edKeys.ArrowRight)?1:0)-((edKeys.KeyA||edKeys.ArrowLeft)?1:0),y=((edKeys.KeyW||edKeys.ArrowUp)?1:0)-((edKeys.KeyS||edKeys.ArrowDown)?1:0);if(x||y)panBy(-x*s,y*s)}
+function panBy(dx,dy){const k=dist*0.0016,r=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw)),d=r.multiplyScalar(-dx*k);
+  target.x+=d.x;target.z+=d.z;target.y=Math.max(0.1,Math.min(2.6,target.y+dy*k));camOff.x+=d.x;camOff.z+=d.z}
+let moveMode=false,camFollow=true,dragging=null;
+const cv=renderer.domElement;
+cv.addEventListener('pointerdown',e=>{cv.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(ptrs.size===1){tapStart={x:e.clientX,y:e.clientY,t:performance.now()};if(moveMode)startDrag(e)}
+  if(ptrs.size===2){const [a,b]=[...ptrs.values()];pinch0=Math.hypot(a.x-b.x,a.y-b.y);dist0=dist;mid0={x:(a.x+b.x)/2,y:(a.y+b.y)/2};tapStart=null;endDrag()}});
+cv.addEventListener('pointermove',e=>{const p=ptrs.get(e.pointerId);if(!p)return;
+  if(ptrs.size===1&&dragging)dragTo(e);
+  else if(ptrs.size===1&&!camLocked){yaw-=(e.clientX-p.x)*0.008;pitch=Math.max(-0.4,Math.min(1.2,pitch+(e.clientY-p.y)*0.006))}
+  p.x=e.clientX;p.y=e.clientY;
+  if(ptrs.size===2&&!camLocked){const [a,b]=[...ptrs.values()];const d=Math.hypot(a.x-b.x,a.y-b.y);if(pinch0>0)dist=Math.max(0.6,Math.min(10,dist0*pinch0/d));
+    const mx=(a.x+b.x)/2,my=(a.y+b.y)/2;if(mid0){panBy(mx-mid0.x,my-mid0.y)}mid0={x:mx,y:my}}});
+const endP=e=>{endDrag();if(tapStart&&ptrs.size===1){const dx=e.clientX-tapStart.x,dy=e.clientY-tapStart.y;if(Math.hypot(dx,dy)<8&&performance.now()-tapStart.t<400)pick(e)}ptrs.delete(e.pointerId);if(ptrs.size<2){pinch0=0;mid0=null}tapStart=null};
+cv.addEventListener('pointerup',endP);cv.addEventListener('pointercancel',e=>{endDrag();ptrs.delete(e.pointerId);tapStart=null});
+cv.addEventListener('wheel',e=>{e.preventDefault();if(camLocked)return;dist=Math.max(1.2,Math.min(8,dist*(1+e.deltaY*0.001)))},{passive:false});
+document.addEventListener('gesturestart',e=>e.preventDefault());
+const gRay=new THREE.Raycaster(),gNdc=new THREE.Vector2(),gPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0),gHit=new THREE.Vector3();
+function ndcOf(e,v){const r=cv.getBoundingClientRect();v.set((e.clientX-r.left)/r.width*2-1,-((e.clientY-r.top)/r.height)*2+1);return v}
+function groundAt(e){gRay.setFromCamera(ndcOf(e,gNdc),camera);return gRay.ray.intersectPlane(gPlane,gHit)}
+function startDrag(e){if(!A||game.on)return;const h=groundAt(e);if(!h)return;stopPlay();const p=work.pos||[0,0];dragging={dx:p[0]-h.x,dz:p[1]-h.z}}
+function dragTo(e){const h=groundAt(e);if(!h)return;const c=v=>Math.max(-5,Math.min(5,+v.toFixed(2)));work.pos=[c(h.x+dragging.dx),c(h.z+dragging.dz)];applyPose(work.pose,work.drop);syncUI()}
+function endDrag(){if(!dragging)return;dragging=null;commitEdit();syncUI()}
+
+// ---- assets: embedded base64 when present, otherwise a .glb next to the page ----
+function getGLB(name){const tag=document.getElementById('b64_'+name);
+  if(tag){const bin=atob(tag.textContent.replace(/\s+/g,'')),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return Promise.resolve(u.buffer)}
+  return fetch(name+'.glb').then(r=>{if(!r.ok)throw new Error(name+'.glb: HTTP '+r.status);return r.arrayBuffer()})}
+
+// ---- model ----
+let model=null,bones={},K={},meshes=[];
+{
+  getGLB('knight').then(buf=>new GLTFLoader().parse(buf,'',gl=>{
+    model=gl.scene;model.scale.setScalar(SCALE);model.position.set(OFF[0]*SCALE,0,OFF[2]*SCALE);player.add(model);
+    const all={},aniso=renderer.capabilities.getMaxAnisotropy();
+    model.traverse(o=>{
+      if(o.isBone)all[o.name]=o;
+      if(o.isMesh){o.castShadow=true;o.receiveShadow=true;o.frustumCulled=false;meshes.push(o);const m=o.material;
+        if(m){for(const k of ['map','normalMap','roughnessMap','metalnessMap'])if(m[k]){m[k].anisotropy=aniso;m[k].needsUpdate=true}
+          if(m.normalScale)m.normalScale.set(1.6,1.6);m.envMapIntensity=1.2}}
+    });
+    player.updateMatrixWorld(true);
+    const mq=new THREE.Quaternion();model.getWorldQuaternion(mq);mq.invert();
+    const wq=o=>{const q=new THREE.Quaternion();o.getWorldQuaternion(q);return mq.clone().multiply(q)};
+    for(const k of Object.keys(all)){const b=all[k];bones[k]=b;const P0=wq(b.parent);K[k]={P0,P0i:P0.clone().invert(),L0:b.quaternion.clone()}}
+    prepBuild();addEyes();addSword();
+    $('load').style.display='none';
+    init();
+  },err=>{$('load').textContent='Ошибка модели: '+(err&&err.message||err)})).catch(err=>{$('load').textContent='Ошибка загрузки: '+(err&&err.message||err)});
+}
+// ---- build: slimmer torso / pelvis / thighs, slightly taller ----
+const TORSO=new Set(['Waist','Spine01','Spine02']),PELV=new Set(['Hip','Pelvis']);
+const THL=new Set(['L_Thigh','L_ThighTwist01','L_ThighTwist02']),THR=new Set(['R_Thigh','R_ThighTwist01','R_ThighTwist02']);
+const BKEY='knightBuild2',CX=0.004,CZ=0,BDEF={torso:1,hips:1,tall:1},BLIM={torso:[0.65,1],hips:[0.65,1],tall:[1,1.15]};
+const build={...BDEF};
+try{const v=JSON.parse(ls.get(BKEY)||'null');if(v)for(const k in build)if(typeof v[k]==='number')build[k]=Math.max(BLIM[k][0],Math.min(BLIM[k][1],v[k]))}catch(e){}
+const buildData=[];let legAx=null;
+function bindPos(o,nm){const i=o.skeleton.bones.findIndex(b=>b.name===nm);return new THREE.Vector3().setFromMatrixPosition(o.skeleton.boneInverses[i].clone().invert())}
+function prepBuild(){
+  for(const o of meshes){if(!o.isSkinnedMesh)continue;
+    if(!legAx){const s=(a,b)=>{const A=bindPos(o,a),B=bindPos(o,b);return{A,D:B.clone().sub(A),L2:B.clone().sub(A).lengthSq()}};legAx=[s('L_Thigh','L_Calf'),s('R_Thigh','R_Calf')]}
+    const pos=o.geometry.attributes.position,si=o.geometry.attributes.skinIndex,sw=o.geometry.attributes.skinWeight;
+    const cat=o.skeleton.bones.map(b=>TORSO.has(b.name)?1:PELV.has(b.name)?2:THL.has(b.name)?3:THR.has(b.name)?4:0);
+    const n=pos.count,w=new Float32Array(n*4);
+    for(let i=0;i<n;i++)for(let c=0;c<4;c++){const k=cat[si.getComponent(i,c)];if(k)w[i*4+k-1]+=sw.getComponent(i,c)}
+    buildData.push({o,pos,orig:Float32Array.from(pos.array),w})}
+  applyBuild();
+}
+function applyBuild(){
+  const kt=build.torso,kh=build.hips;
+  for(const d of buildData){const a=d.pos.array,O=d.orig,n=d.pos.count,w=d.w;
+    for(let i=0;i<n;i++){
+      const x=O[i*3],y=O[i*3+1],z=O[i*3+2],wt=w[i*4],wp=w[i*4+1];
+      let nx=CX+(x-CX)*(1-(1-kt)*wt-(1-kh)*wp),nz=CZ+(z-CZ)*(1-(1-kt)*0.5*wt-(1-kh)*0.6*wp);
+      for(let s=0;s<2;s++){const ww=w[i*4+2+s];if(ww<0.001||!legAx)continue;const L=legAx[s];
+        let u=((x-L.A.x)*L.D.x+(y-L.A.y)*L.D.y+(z-L.A.z)*L.D.z)/L.L2;u=Math.max(0,Math.min(1,u));
+        const cx=L.A.x+L.D.x*u,cz=L.A.z+L.D.z*u,f=(1-kh)*ww;nx-=(x-cx)*f;nz-=(z-cz)*f}
+      a[i*3]=nx;a[i*3+2]=nz}
+    d.pos.needsUpdate=true;d.o.geometry.computeBoundingSphere()}
+  if(model)model.scale.set(SCALE,SCALE*build.tall,SCALE);
+  for(const k in build){$('b_'+k).value=build[k];$('o_'+k).textContent=Math.round(build[k]*100)+'%'}
+}
+const setBuild=(k,v)=>{build[k]=Math.max(BLIM[k][0],Math.min(BLIM[k][1],+(+v).toFixed(2)));applyBuild();ls.set(BKEY,JSON.stringify(build))};
+for(const k in build)$('b_'+k).addEventListener('input',e=>setBuild(k,e.target.value));
+document.querySelectorAll('button[data-b]').forEach(b=>b.addEventListener('click',()=>setBuild(b.dataset.b,build[b.dataset.b]+ +b.dataset.d)));
+const BPKEY='knightBuildPresets',BP_BUILTIN=[{id:'bb_slim',name:'Основное',v:{...BDEF},builtin:true},{id:'bb_orig',name:'Исходная модель',v:{torso:1,hips:1,tall:1},builtin:true}];
+let userB=[];try{userB=JSON.parse(ls.get(BPKEY)||'[]')||[]}catch(e){userB=[]}
+const allB=()=>[...BP_BUILTIN,...userB],findB=id=>allB().find(p=>p.id===id);let bDelArm=false,bDelT=0;
+function fillB(sel){const s=$('bpsel'),v=sel||s.value;s.innerHTML=allB().map(p=>`<option value="${p.id}">${p.builtin?'🔒 ':''}${String(p.name).replace(/[&<>"']/g,'')}</option>`).join('');s.value=findB(v)?v:'bb_slim';syncB()}
+function syncB(){const p=findB($('bpsel').value);$('bpDel').disabled=!p||p.builtin;bDelArm=false;clearTimeout(bDelT);$('bpDel').textContent=p&&p.builtin?'🔒':'Удалить'}
+$('bpsel').addEventListener('change',syncB);
+$('bpApply').onclick=()=>{const p=findB($('bpsel').value);if(!p)return;Object.assign(build,p.v);applyBuild();ls.set(BKEY,JSON.stringify(build));toast('Телосложение: '+p.name)};
+$('bpSave').onclick=()=>{const p={id:'ub'+Date.now().toString(36),name:'Моё телосложение '+(userB.length+1),v:{...build}};userB.push(p);ls.set(BPKEY,JSON.stringify(userB));fillB(p.id);toast('Сохранено: '+p.name)};
+$('bpDel').onclick=()=>{const i=userB.findIndex(p=>p.id===$('bpsel').value);if(i<0)return;if(!bDelArm){bDelArm=true;$('bpDel').textContent='Точно?';bDelT=setTimeout(syncB,3000);return}userB.splice(i,1);ls.set(BPKEY,JSON.stringify(userB));fillB('bb_slim');toast('Удалено')};
+fillB();
+
+// ---- sword in the left fist, carried by the L_Hand bone ----
+let swordObj=null,swordOn=ls.get('knightSword')!=='0';
+function addSword(){const hand=bones.L_Hand;if(!hand||!DATA.sword)return;
+  getGLB('sword').then(buf=>new GLTFLoader().parse(buf,'',gl=>{
+    const s=gl.scene,aniso=renderer.capabilities.getMaxAnisotropy();
+    s.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;const m=o.material;if(m){for(const k of ['map','normalMap','roughnessMap','metalnessMap'])if(m[k])m[k].anisotropy=aniso;if(m.normalScale)m.normalScale.set(1.4,1.4);m.envMapIntensity=1.2}}});
+    const g=new THREE.Group();g.matrixAutoUpdate=false;g.matrix.fromArray(DATA.sword.local);g.add(s);hand.add(g);swordObj=g;g.visible=swordOn;
+  },e=>console.warn('sword',e))).catch(e=>console.warn('sword',e));
+}
+
+// ---- red eyeballs: painted into the texture, lit by an emissive map that covers only the eyeballs ----
+const EYE_GLOW=1.6;
+function addEyes(){for(const o of meshes){const m=o.material;if(m&&m.emissiveMap){m.emissive.set(0xffffff);m.emissiveIntensity=EYE_GLOW;m.needsUpdate=true}}}
+
+const _e=new THREE.Euler(),_q=new THREE.Quaternion();
+// base stance = built-in stance + the user's edits (STX bone offsets, STXF finger settings); every animation sits on it
+const STKEY='knightStanceCur2',STPKEY='knightStances2';
+let STX={},STXF={},stCurId='st_main';
+try{const c=JSON.parse(ls.get(STKEY)||'null');if(c){STX=c.x||{};STXF=c.f||{};stCurId=c.id||'st_main'}}catch(e){}
+const SQ={},SQB={};
+function rebuildStance(){for(const k in SQ)delete SQ[k];for(const k in SQB)delete SQB[k];const qe=e=>new THREE.Quaternion().setFromEuler(new THREE.Euler(e[0]*D2R,e[1]*D2R,e[2]*D2R));
+  for(const k of new Set([...Object.keys(STANCE),...Object.keys(STX)])){const q=STX[k]?qe(STX[k]):new THREE.Quaternion();if(STANCE[k]){q.multiply(qe(STANCE[k]));SQB[k]=qe(STANCE[k])}SQ[k]=q}}
+rebuildStance();
+// ---- breathing: a slow additive layer on top of any pose (not stored in animations) ----
+const BREATH={Spine01:[-0.8,0,0],Spine02:[-1.9,0,0],L_Clavicle:[0,0,1.5],R_Clavicle:[0,0,-1.5],L_Upperarm:[0,0,0.6],R_Upperarm:[0,0,-0.6],NeckTwist01:[0.9,0,0],Head:[1.1,0,0]};
+const BREATH_T=3.6;let breathOn=ls.get('knightBreath')!=='0',breathT=0,breathS=0,breathAmt=1;
+const _bq=new THREE.Quaternion(),_be=new THREE.Euler(),_yAx=new THREE.Vector3(0,1,0);
+function stepBreath(dt){breathT+=dt;const ph=(breathT%BREATH_T)/BREATH_T;
+  // inhale a bit longer than exhale, smooth at both ends
+  const x=ph<0.45?ph/0.45:1-(ph-0.45)/0.55;breathS=x*x*(3-2*x)}
+// ---- look-ahead: head leads turns (game only), split over head, neck and chest ----
+const LOOK={Head:0.55,NeckTwist01:0.3,Spine02:0.15};let lookYaw=0;
+// pose values are offsets on top of the base stance (arms down, level shoulders)
+function applyPose(pose,drop){
+  // user's stance edits apply unless the animation playing (editor or game) opted out
+  const useX=stanceMode||(game.on?game.useX!==false:!(A&&A.useStance===false)),SQ_=useX?SQ:SQB;
+  for(const k in K){const c=K[k],e=pose[k];
+    if(e){_e.set(e[0]*D2R,e[1]*D2R,e[2]*D2R);_q.setFromEuler(_e)}else _q.identity();
+    if(SQ_[k])_q.multiply(SQ_[k]);
+    if(lookYaw&&LOOK[k])_q.premultiply(_bq.setFromAxisAngle(_yAx,lookYaw*LOOK[k]));
+    const br=breathOn&&BREATH[k];if(br){const s=breathS*breathAmt*D2R;_be.set(br[0]*s,br[1]*s,br[2]*s);_q.premultiply(_bq.setFromEuler(_be))}
+    bones[k].quaternion.copy(c.P0i).multiply(_q).multiply(c.P0).multiply(c.L0)}
+  if(model)model.position.y=(drop||0)+(breathOn?0.004*breathS*breathAmt:0);
+  const p=work.pos||[0,0];player.position.set(p[0],0,p[1]);player.rotation.y=(work.rot||0)*D2R;
+}
+
+// ---- animation data ----
+let A=null,sel='L_Upperarm',time=0,playing=false;
+const newAnim=()=>({name:'Новая анимация',duration:2,loop:true,keys:[{t:0,drop:0,smoke:0,pose:{},pos:[0,0],rot:0}]});
+const clone=o=>JSON.parse(JSON.stringify(o));
+const ease=x=>x<.5?2*x*x:1-Math.pow(-2*x+2,2)/2;
+function sample(t,AN=A){
+  const ks=AN.keys;if(!ks.length)return{pose:{},drop:0,smoke:0,pos:[0,0],rot:0};
+  const P=k=>k.pos||[0,0];
+  if(t<=ks[0].t)return{pose:ks[0].pose,fingers:ks[0].fingers,drop:ks[0].drop||0,smoke:ks[0].smoke||0,pos:[...P(ks[0])],rot:ks[0].rot||0};
+  const last=ks[ks.length-1];if(t>=last.t)return{pose:last.pose,fingers:last.fingers,drop:last.drop||0,smoke:last.smoke||0,pos:[...P(last)],rot:last.rot||0};
+  let i=1;while(ks[i].t<t)i++;
+  const a=ks[i-1],b=ks[i],ls_=(t-a.t)/(b.t-a.t),s=AN.smooth===false?ls_:ease(ls_);
+  const pose={};for(const n of ANIM_B){const x=a.pose[n],y=b.pose[n];if(!x&&!y)continue;const X=x||[0,0,0],Y=y||[0,0,0];pose[n]=[X[0]+(Y[0]-X[0])*s,X[1]+(Y[1]-X[1])*s,X[2]+(Y[2]-X[2])*s]}
+  let fingers;if(a.fingers||b.fingers){fingers={};for(const h of ['L','R']){const x=(a.fingers||{})[h],y=(b.fingers||{})[h];if(!x&&!y)continue;const X=x||emptyHand(),Y=y||emptyHand(),o={};for(const k in X)o[k]=Math.round((X[k]+(Y[k]-X[k])*s)*10)/10;fingers[h]=o}}
+  const pa=P(a),pb=P(b);
+  return{pose,fingers,drop:(a.drop||0)+((b.drop||0)-(a.drop||0))*s,smoke:(a.smoke||0)+((b.smoke||0)-(a.smoke||0))*ls_,pos:[pa[0]+(pb[0]-pa[0])*ls_,pa[1]+(pb[1]-pa[1])*ls_],rot:(a.rot||0)+((b.rot||0)-(a.rot||0))*s};
+}
+const keyAt=t=>A.keys.findIndex(k=>Math.abs(k.t-t)<0.025);
+let work={pose:{},drop:0,smoke:0,pos:[0,0],rot:0};
+function refresh(fromTime=true){
+  if(fromTime){const s=sample(time);work={pose:clone(s.pose),fingers:s.fingers?clone(s.fingers):{},drop:s.drop,smoke:s.smoke,pos:s.pos,rot:s.rot}}
+  applyPose(work.pose,work.drop);syncUI();
+}
+function commitEdit(){
+  const i=keyAt(time),pos=[...(work.pos||[0,0])],rot=work.rot||0;
+  const fingers=clone(work.fingers||{});
+  if(i>=0){Object.assign(A.keys[i],{pose:clone(work.pose),fingers,drop:work.drop,smoke:work.smoke||0,pos,rot})}
+  else{A.keys.push({t:+time.toFixed(2),pose:clone(work.pose),fingers,drop:work.drop,smoke:work.smoke||0,pos,rot});A.keys.sort((a,b)=>a.t-b.t)}
+  save();drawMarks();
+}
+function save(){ls.set(KEY,JSON.stringify(A))}
+
+// ---- UI ----
+const bsel=$('bsel');bsel.innerHTML=BONES.map(b=>`<option value="${b}">${LABEL[b]}</option>`).join('');
+const isSimple=()=>document.body.classList.contains('simple');
+function syncUI(){
+  bsel.value=sel;$('bname').textContent=LABEL[sel];
+  const e=(stanceMode?STX[sel]:work.pose[sel])||[0,0,0];
+  for(let a=0;a<3;a++){$('ax'+a).value=Math.round(e[a]);$('o'+a).textContent=Math.round(e[a])+'°'}
+  $('drop').value=work.drop;$('od').textContent=(+work.drop).toFixed(2);
+  syncFingers();
+  $('smoke').value=work.smoke||0;$('osm').textContent=(+(work.smoke||0)).toFixed(2);
+  const wp=work.pos||[0,0];$('px').value=wp[0];$('opx').textContent=wp[0].toFixed(2);$('pz').value=wp[1];$('opz').textContent=wp[1].toFixed(2);
+  $('pr').value=Math.round(work.rot||0);$('opr').textContent=Math.round(work.rot||0)+'°';
+  $('time').max=A.duration;$('time').value=time;$('tlabel').textContent=time.toFixed(2)+' / '+A.duration.toFixed(2)+' с';
+  $('dur').value=A.duration;$('loop').classList.toggle('on',!!A.loop);$('useSt').classList.toggle('on',A.useStance!==false);
+  const k=keyAt(time);$('addKey').textContent=k>=0?'Ключ обновлён ✓':'+ Ключ здесь';$('delKey').disabled=k<0;$('fDel').disabled=k<0;
+  [...$('marks').children].forEach((m,i)=>m.classList.toggle('cur',i===k));
+  [...$('frames').children].forEach((b,i)=>b.classList.toggle('on',i===k));
+  if(isSimple())$('tlabel').textContent=(k>=0?'Кадр '+(k+1)+' из '+A.keys.length:'между кадрами')+' · '+time.toFixed(2)+' с';
+}
+function drawMarks(){
+  $('marks').innerHTML=A.keys.map(k=>`<i style="left:${k.t/A.duration*100}%"></i>`).join('');
+  $('frames').innerHTML=A.keys.map((k,i)=>`<button data-f="${i}">Кадр ${i+1}</button>`).join('');
+  updatePath();syncUI();
+}
+function updatePath(){
+  const moved=A.keys.some(k=>k.pos&&(k.pos[0]||k.pos[1]));
+  pathLine.visible=pathDots.visible=moved&&!game.on;if(!moved)return;
+  const arr=[];for(const k of A.keys){const p=k.pos||[0,0];arr.push(p[0],0.015,p[1])}
+  const attr=new THREE.Float32BufferAttribute(arr,3);
+  pathLine.geometry.dispose();pathLine.geometry=new THREE.BufferGeometry().setAttribute('position',attr);
+  pathDots.geometry.dispose();pathDots.geometry=new THREE.BufferGeometry().setAttribute('position',attr.clone());
+}
+const stopPlay=()=>{playing=false;$('play').textContent='▶ Пуск';$('uiPlay').textContent='▶'};
+function setAxis(a,v){if(stanceMode)return setStanceAxis(a,v);stopPlay();v=Math.max(-180,Math.min(180,v));const e=work.pose[sel]?[...work.pose[sel]]:[0,0,0];e[a]=v;work.pose[sel]=e;applyPose(work.pose,work.drop);commitEdit();syncUI()}
+for(let a=0;a<3;a++)$('ax'+a).addEventListener('input',e=>setAxis(a,+e.target.value));
+document.querySelectorAll('.ax button[data-a]').forEach(b=>b.addEventListener('click',()=>{const a=+b.dataset.a;const e=(stanceMode?STX[sel]:work.pose[sel])||[0,0,0];setAxis(a,Math.round(e[a])+ +b.dataset.d)}));
+const setDrop=v=>{stopPlay();work.drop=Math.max(-0.4,Math.min(0.2,+(+v).toFixed(2)));applyPose(work.pose,work.drop);commitEdit();syncUI()};
+// ---- finger controls ----
+let fHand='R';
+function curHand(){if(stanceMode)return STXF[fHand]||(STXF[fHand]=emptyHand());work.fingers=work.fingers||{};return work.fingers[fHand]||(work.fingers[fHand]=emptyHand())}
+function syncFingers(){const m=(stanceMode?STXF:(work.fingers||{}))[fHand]||emptyHand(),f=$('fsel').value;
+  const c=f==='all'?Math.round((m.I+m.M+m.R+m.P)/4):m[f];$('fcurl').value=c;$('ofc').textContent=Math.round(c)+'°';
+  const sp=f==='T'?(m.TS||0):m.S;$('fspread').value=sp;$('ofs').textContent=Math.round(sp)+'°';$('fhL').classList.toggle('on',fHand==='L');$('fhR').classList.toggle('on',fHand==='R')}
+function applyFingers(){if(stanceMode){fingersToPose(STX,fHand,curHand());saveStance();return}stopPlay();fingersToPose(work.pose,fHand,curHand());applyPose(work.pose,work.drop);commitEdit();syncUI()}
+const setCurl=v=>{const m=curHand(),f=$('fsel').value;v=Math.max(-110,Math.min(140,Math.round(+v)));if(f==='all')for(const k of ['I','M','R','P'])m[k]=v;else m[f]=v;applyFingers()};
+const setSpread=v=>{const m=curHand();v=Math.max(-45,Math.min(75,Math.round(+v)));if($('fsel').value==='T')m.TS=v;else m.S=v;applyFingers()};
+$('fcurl').addEventListener('input',e=>setCurl(e.target.value));$('fspread').addEventListener('input',e=>setSpread(e.target.value));
+$('fcm').onclick=()=>setCurl(+$('fcurl').value-5);$('fcp').onclick=()=>setCurl(+$('fcurl').value+5);
+$('fsm').onclick=()=>setSpread(+$('fspread').value-3);$('fsp').onclick=()=>setSpread(+$('fspread').value+3);
+$('fhL').onclick=()=>{fHand='L';syncFingers()};$('fhR').onclick=()=>{fHand='R';syncFingers()};
+$('fsel').addEventListener('change',syncFingers);
+// for the left hand the stance already holds the sword in a fist, so "fist" there means no extra curl
+$('fFist').onclick=()=>{const m=curHand(),c=fHand==='L'?0:80;Object.assign(m,{I:c,M:c,R:c,P:c,T:fHand==='L'?0:40,S:0,TS:0});applyFingers()};
+$('fOpen').onclick=()=>{const m=curHand(),c=fHand==='L'?-70:-10;Object.assign(m,{I:c,M:c,R:c,P:c,T:fHand==='L'?-20:-8,S:12,TS:fHand==='L'?30:10});applyFingers()};
+$('fRest').onclick=()=>{if(stanceMode){STXF[fHand]=emptyHand()}else{work.fingers=work.fingers||{};work.fingers[fHand]=emptyHand()}applyFingers()};
+const setSmoke=v=>{stopPlay();work.smoke=Math.max(0,Math.min(1,+(+v).toFixed(2)));commitEdit();syncUI()};
+$('smoke').addEventListener('input',e=>setSmoke(e.target.value));$('sm').onclick=()=>setSmoke((work.smoke||0)-0.05);$('sp').onclick=()=>setSmoke((work.smoke||0)+0.05);
+$('drop').addEventListener('input',e=>setDrop(e.target.value));$('dm').onclick=()=>setDrop(work.drop-0.01);$('dp').onclick=()=>setDrop(work.drop+0.01);
+const clampP=v=>Math.max(-5,Math.min(5,+(+v).toFixed(2)));
+const setPos=(ax,v)=>{stopPlay();const p=[...(work.pos||[0,0])];p[ax]=clampP(v);work.pos=p;applyPose(work.pose,work.drop);commitEdit();syncUI()};
+const setRot=v=>{stopPlay();work.rot=Math.max(-180,Math.min(180,Math.round(+v)));applyPose(work.pose,work.drop);commitEdit();syncUI()};
+$('px').addEventListener('input',e=>setPos(0,e.target.value));$('pz').addEventListener('input',e=>setPos(1,e.target.value));$('pr').addEventListener('input',e=>setRot(e.target.value));
+$('pxm').onclick=()=>setPos(0,(work.pos||[0,0])[0]-0.05);$('pxp').onclick=()=>setPos(0,(work.pos||[0,0])[0]+0.05);
+$('pzm').onclick=()=>setPos(1,(work.pos||[0,0])[1]-0.05);$('pzp').onclick=()=>setPos(1,(work.pos||[0,0])[1]+0.05);
+$('prm').onclick=()=>setRot((work.rot||0)-5);$('prp').onclick=()=>setRot((work.rot||0)+5);
+$('posReset').onclick=()=>{stopPlay();work.pos=[0,0];work.rot=0;applyPose(work.pose,work.drop);commitEdit();syncUI();toast('Персонаж в центре')};
+$('posPrev').onclick=()=>{const k=[...A.keys].reverse().find(k=>k.t<time-0.026);if(!k)return toast('Нет кадра раньше');stopPlay();work.pos=[...(k.pos||[0,0])];work.rot=k.rot||0;applyPose(work.pose,work.drop);commitEdit();syncUI()};
+const hintDef=$('hintv').innerHTML;
+$('breathBtn').classList.toggle('on',breathOn);
+$('breathBtn').onclick=()=>{breathOn=!breathOn;ls.set('knightBreath',breathOn?'1':'0');$('breathBtn').classList.toggle('on',breathOn);applyPose(work.pose,work.drop);toast(breathOn?'Дыхание включено':'Дыхание выключено')};
+$('feetBtn').classList.toggle('on',feetOn);
+$('feetBtn').onclick=()=>{feetOn=!feetOn;ls.set('knightFeet',feetOn?'1':'0');$('feetBtn').classList.toggle('on',feetOn);if(!feetOn)feetFx.clear();toast(feetOn?'Дым у рук и ног':'Без дыма у рук и ног (заклинание остаётся)')};
+$('swordBtn').classList.toggle('on',swordOn);
+$('swordBtn').onclick=()=>{swordOn=!swordOn;ls.set('knightSword',swordOn?'1':'0');$('swordBtn').classList.toggle('on',swordOn);if(swordObj)swordObj.visible=swordOn};
+function setClean(on){if(on&&game.on)return;document.body.classList.toggle('clean',on);gizmo.visible=!on&&!game.on;if(on){pathLine.visible=pathDots.visible=false}else updatePath()}
+$('uiHide').onclick=()=>setClean(true);$('uiBack').onclick=()=>setClean(false);
+$('uiPlay').onclick=()=>$('play').onclick();
+$('camFollow').onclick=()=>{camFollow=!camFollow;$('camFollow').classList.toggle('on',camFollow);if(!camFollow&&!camLocked){target.x=0;target.z=0;camOff.set(0,0,0)}};
+$('camLock').classList.toggle('on',camLocked);
+$('camLock').onclick=()=>{camLocked=!camLocked;$('camLock').classList.toggle('on',camLocked);saveCam();toast(camLocked?'Камера зафиксирована':'Камера свободна')};
+$('camReset').onclick=()=>{camLocked=false;$('camLock').classList.remove('on');yaw=0.5;pitch=0.15;dist=3.6;camOff.set(0,0,0);target.set(player.position.x,1.0,player.position.z);saveCam();toast('Вид по умолчанию')};
+bsel.addEventListener('change',()=>{sel=bsel.value;syncUI()});
+$('bReset').onclick=()=>{if(stanceMode){delete STX[sel];const m=mirrorName(sel);if(stSym&&m!==sel)delete STX[m];saveStance();return}delete work.pose[sel];applyPose(work.pose,work.drop);commitEdit();syncUI()};
+$('time').addEventListener('input',e=>{stopPlay();time=+e.target.value;refresh()});
+$('play').onclick=()=>{if(stanceMode)return;playing=!playing;if(playing&&time>=A.duration-0.01){time=0}$('uiPlay').textContent=playing?'❚❚':'▶';$('play').textContent=playing?'❚❚ Пауза':'▶ Пуск'};
+$('prev').onclick=()=>{const k=[...A.keys].reverse().find(k=>k.t<time-0.026);time=k?k.t:0;stopPlay();refresh()};
+$('next').onclick=()=>{const k=A.keys.find(k=>k.t>time+0.026);time=k?k.t:A.duration;stopPlay();refresh()};
+$('addKey').onclick=()=>{commitEdit();toast('Ключ на '+time.toFixed(2)+' с')};
+$('delKey').onclick=()=>{const i=keyAt(time);if(i<0)return;if(A.keys.length<2)return toast('Нужен хотя бы один ключ');A.keys.splice(i,1);save();drawMarks();refresh();toast('Ключ удалён')};
+let clipPose=null;
+$('copyKey').onclick=()=>{clipPose=clone(work);toast('Поза скопирована')};
+$('pasteKey').onclick=()=>{if(!clipPose)return toast('Сначала скопируйте позу');stopPlay();work=Object.assign(clone(clipPose),{pos:work.pos,rot:work.rot});applyPose(work.pose,work.drop);commitEdit();syncUI();toast('Поза вставлена')};
+$('mirror').onclick=()=>{stopPlay();const m={};for(const k in work.pose){const e=work.pose[k];const t=k.startsWith('L_')?'R_'+k.slice(2):k.startsWith('R_')?'L_'+k.slice(2):k;m[t]=[e[0],-e[1],-e[2]]}work.pose=m;if(work.fingers){const f=work.fingers;work.fingers={};if(f.L)work.fingers.R=f.L;if(f.R)work.fingers.L=f.R}applyPose(work.pose,work.drop);commitEdit();syncUI();toast('Поза отзеркалена')};
+$('dur').addEventListener('change',e=>{const d=Math.max(0.2,Math.min(20,+e.target.value||2));const f=d/A.duration;A.keys.forEach(k=>k.t=+(k.t*f).toFixed(3));A.duration=d;time=Math.min(time*f,d);save();drawMarks();refresh()});
+$('loop').onclick=()=>{A.loop=!A.loop;save();syncUI()};
+$('useSt').onclick=()=>{A.useStance=A.useStance===false;save();applyPose(work.pose,work.drop);syncUI();toast(A.useStance===false?'Эта анимация — без правок стойки':'Эта анимация — со стойкой')};
+$('newA').onclick=()=>{stopPlay();A=newAnim();time=0;save();drawMarks();refresh();toast('Новая анимация из базовой стойки')};
+$('exportAll').onclick=()=>{
+  const pack={kind:'knight-backup',when:new Date().toISOString(),presets:userP,stances:userSt,stance:{id:stCurId,x:STX,f:STXF},build:{...build},buildPresets:userB,current:A};
+  const s=JSON.stringify(pack);$('json').value=s;$('json').closest('details').open=true;
+  navigator.clipboard.writeText(s).then(()=>toast('Всё скопировано — вставь в чат')).catch(()=>{$('json').select();toast('Выделено — скопируй вручную')})};
+$('doExport').onclick=()=>{$('json').value=JSON.stringify(A)};
+$('doCopy').onclick=()=>{const t=JSON.stringify(A);$('json').value=t;navigator.clipboard.writeText(t).then(()=>toast('JSON скопирован')).catch(()=>{$('json').select();toast('Выделено — скопируйте вручную')})};
+$('doImport').onclick=()=>{try{const o=JSON.parse($('json').value);if(!o.keys||!o.duration)throw 0;o.keys.sort((a,b)=>a.t-b.t);stopPlay();A=o;time=0;save();drawMarks();refresh();toast('Анимация загружена')}catch(e){toast('Не похоже на JSON анимации')}};
+function toast(t){const el=$('toast');el.textContent=t;el.style.opacity=1;clearTimeout(toast.h);toast.h=setTimeout(()=>el.style.opacity=0,1600)}
+
+// ---- base stance editing, saving and switching ----
+let stanceMode=false,stSym=true,stPreview=false,stT=0;
+const mirrorName=k=>k.startsWith('L_')?'R_'+k.slice(2):k.startsWith('R_')?'L_'+k.slice(2):k;
+let userSt=[];try{userSt=JSON.parse(ls.get(STPKEY)||'[]')||[]}catch(e){userSt=[]}
+const ST_BUILTIN=[{id:'st_main',name:'Основная',x:{},f:{},builtin:true}];
+const allSt=()=>[...ST_BUILTIN,...userSt],findSt=id=>allSt().find(s=>s.id===id);
+function persistCur(){ls.set(STKEY,JSON.stringify({id:stCurId,x:STX,f:STXF}))}
+function saveStance(){for(const k in STX)if(STX[k].every(v=>v===0))delete STX[k];persistCur();rebuildStance();showStance();syncUI()}
+function setStanceAxis(a,v){v=Math.max(-90,Math.min(90,Math.round(v)));const e=STX[sel]?[...STX[sel]]:[0,0,0];e[a]=v;STX[sel]=e;
+  const m=mirrorName(sel);if(stSym&&m!==sel)STX[m]=[e[0],-e[1],-e[2]];saveStance()}
+function showStance(){if(!stanceMode||stPreview)return;work={pose:{},fingers:{},drop:0,smoke:0,pos:[0,0],rot:0};applyPose(work.pose,0)}
+let stDelArm=false,stDelT=0;
+function fillSt(){const s=$('stSel');s.innerHTML=allSt().map(p=>`<option value="${p.id}">${p.builtin?'🔒 ':''}${esc(p.name)}</option>`).join('');s.value=findSt(stCurId)?stCurId:'st_main';syncStBtns()}
+function syncStBtns(){const p=findSt($('stSel').value);$('stDel').disabled=!p||p.builtin;stDelArm=false;clearTimeout(stDelT);$('stDel').textContent='Удалить'}
+function setStanceMode(on){if(game.on)return;stanceMode=on;stopPlay();document.body.classList.toggle('stance',on);
+  $('stEdit').textContent=on?'✓ Готово — выйти из стойки':'🧍 Базовая стойка';stPreview=false;$('stPrev').classList.remove('on');
+  if(on){fillSt();$('panel').scrollTop=0;showStance();syncUI();toast('Правка базовой стойки')}else{refresh();toast('Стойка применена ко всем анимациям')}}
+$('stEdit').onclick=()=>setStanceMode(!stanceMode);
+$('stSym').onclick=()=>{stSym=!stSym;$('stSym').classList.toggle('on',stSym)};
+$('stPrev').onclick=()=>{stPreview=!stPreview;$('stPrev').classList.toggle('on',stPreview);stT=0;showStance()};
+$('stReset').onclick=()=>{const p=findSt(stCurId)||ST_BUILTIN[0];STX=clone(p.x||{});STXF=clone(p.f||{});saveStance();toast('Правки сброшены')};
+$('stSel').addEventListener('change',syncStBtns);
+$('stApply').onclick=()=>{const p=findSt($('stSel').value);if(!p)return;stCurId=p.id;STX=clone(p.x||{});STXF=clone(p.f||{});saveStance();toast('Стойка: '+p.name)};
+$('stSave').onclick=()=>{const n=$('stName').value.trim()||('Стойка '+(userSt.length+1));const p={id:'us'+Date.now().toString(36),name:n,x:clone(STX),f:clone(STXF)};
+  userSt.push(p);ls.set(STPKEY,JSON.stringify(userSt));stCurId=p.id;persistCur();$('stName').value='';$('stName').blur();fillSt();toast('Стойка «'+n+'» сохранена')};
+$('stDel').onclick=()=>{const i=userSt.findIndex(p=>p.id===$('stSel').value);if(i<0)return;
+  if(!stDelArm){stDelArm=true;$('stDel').textContent='Точно?';stDelT=setTimeout(syncStBtns,3000);return}
+  const n=userSt[i].name,wasCur=userSt[i].id===stCurId;userSt.splice(i,1);ls.set(STPKEY,JSON.stringify(userSt));
+  if(wasCur){stCurId='st_main';STX={};STXF={};saveStance()}fillSt();toast('Стойка «'+n+'» удалена')};
+
+// ---- simple frames mode ----
+const curF=()=>keyAt(time);
+const fStep=()=>Math.max(0.05,Math.min(5,+$('fStep').value||0.3));
+function goFrame(i){if(i<0||i>=A.keys.length)return;stopPlay();time=A.keys[i].t;refresh();const b=$('frames').children[i];if(b)b.scrollIntoView({block:'nearest',inline:'nearest'})}
+function nearestF(){let bi=0,bd=1e9;A.keys.forEach((k,i)=>{const d=Math.abs(k.t-time);if(d<bd){bd=d;bi=i}});return bi}
+$('frames').addEventListener('click',e=>{const b=e.target.closest('button[data-f]');if(b)goFrame(+b.dataset.f)});
+$('fPrev').onclick=()=>{const i=curF();goFrame(i<0?nearestF():Math.max(0,i-1))};
+$('fNext').onclick=()=>{const i=curF();goFrame(i<0?nearestF():Math.min(A.keys.length-1,i+1))};
+$('fAdd').onclick=()=>{
+  stopPlay();let i=curF();if(i<0){commitEdit();i=curF()}
+  const cur=A.keys[i],nxt=A.keys[i+1];let t;
+  if(!nxt){t=+(cur.t+fStep()).toFixed(2);if(t>A.duration)A.duration=t}
+  else{if(nxt.t-cur.t<0.06)return toast('Нет места — нажмите «Выровнять»');t=+((cur.t+nxt.t)/2).toFixed(2)}
+  A.keys.push({t,pose:clone(work.pose),fingers:clone(work.fingers||{}),drop:work.drop,smoke:work.smoke||0,pos:[...(work.pos||[0,0])],rot:work.rot||0});A.keys.sort((a,b)=>a.t-b.t);
+  save();drawMarks();goFrame(A.keys.findIndex(k=>k.t===t));toast('Кадр '+(curF()+1)+' — копия предыдущего');
+};
+$('fDel').onclick=()=>{const i=curF();if(i<0)return;if(A.keys.length<2)return toast('Нужен хотя бы один кадр');A.keys.splice(i,1);save();drawMarks();goFrame(Math.max(0,i-1));toast('Кадр удалён')};
+$('fClear').onclick=()=>{stopPlay();work.pose={};work.drop=0;work.smoke=0;applyPose(work.pose,work.drop);commitEdit();syncUI();toast('Базовая стойка')};
+$('fEven').onclick=()=>{const s=fStep(),i=Math.max(0,curF());A.keys.forEach((k,j)=>k.t=+(j*s).toFixed(3));A.duration=Math.max(0.2,+((A.keys.length-1)*s).toFixed(3));save();drawMarks();goFrame(i);toast('Кадры через '+s+' с')};
+function setMode(m){document.body.classList.toggle('simple',m==='f');$('modeF').classList.toggle('on',m==='f');$('modeK').classList.toggle('on',m!=='f');ls.set(MKEY,m);if(A){if(m==='f'&&curF()<0&&!playing)goFrame(nearestF());else syncUI()}}
+$('modeF').onclick=()=>setMode('f');$('modeK').onclick=()=>setMode('k');
+setMode(ls.get(MKEY)||'f');
+
+// ---- presets ----
+const BUILTIN=[{id:'b_walk',name:'Ходьба',data:WALK,builtin:true},{id:'b_spell',name:'Заклинание',data:SPELL,builtin:true},{id:'b_dash',name:'Рывок вперёд',data:DASH,builtin:true},{id:'b_slash',name:'Удар мечом',data:SLASH,builtin:true}];
+let userP=[];try{userP=JSON.parse(ls.get(PKEY)||'[]')||[]}catch(e){userP=[]}
+const saveP=()=>{if(!ls.set(PKEY,JSON.stringify(userP)))toast('Не удалось сохранить в браузере')};
+const allP=()=>[...BUILTIN,...userP];
+const findP=id=>allP().find(p=>p.id===id);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let pDelArm=false,pDelT=0;
+function syncP(){const p=findP($('psel').value),b=!p||p.builtin;$('pDel').disabled=b;$('pOver').disabled=b;pDelArm=false;clearTimeout(pDelT);$('pDel').textContent=b?'🔒 Встроенный':'Удалить'}
+function fillPresets(selId){
+  const ps=$('psel'),v=selId||ps.value,opt=p=>`<option value="${p.id}">${p.builtin?'🔒 ':''}${esc(p.name)}</option>`;
+  ps.innerHTML=`<optgroup label="Встроенные">${BUILTIN.map(opt).join('')}</optgroup>`+(userP.length?`<optgroup label="Мои пресеты">${userP.map(opt).join('')}</optgroup>`:'');
+  ps.value=findP(v)?v:'b_walk';
+  for(const [id,def,none] of [['gIdle','none','Базовая стойка'],['gWalk','b_walk',''],['gHit','b_spell','Нет'],['gHit2','b_dash','Нет'],['gHit3','b_slash','Нет']]){
+    const s=$(id),val=s.value||def;
+    s.innerHTML=(none?`<option value="none">${none}</option>`:'')+'<option value="cur">★ Текущая в редакторе</option>'+allP().map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
+    s.value=(val==='cur'||(val==='none'&&none)||findP(val))?val:def;
+  }
+  syncP();
+}
+$('psel').addEventListener('change',syncP);
+$('pLoad').onclick=()=>{const p=findP($('psel').value);if(!p)return;stopPlay();A=clone(p.data);A.keys.sort((a,b)=>a.t-b.t);time=0;save();drawMarks();refresh();toast('Открыт: '+p.name)};
+$('pSave').onclick=()=>{const n=$('pname').value.trim()||('Анимация '+(userP.length+1));const d=clone(A);d.name=n;const p={id:'u'+Date.now().toString(36),name:n,data:d};userP.push(p);saveP();$('pname').value='';$('pname').blur();fillPresets(p.id);toast('Сохранён пресет «'+n+'»')};
+$('pOver').onclick=()=>{const p=userP.find(p=>p.id===$('psel').value);if(!p)return toast('Встроенные пресеты менять нельзя');p.data=clone(A);p.data.name=p.name;saveP();toast('Пресет «'+p.name+'» обновлён')};
+$('pDel').onclick=()=>{const i=userP.findIndex(p=>p.id===$('psel').value);if(i<0)return toast('Встроенные пресеты удалить нельзя');
+  if(!pDelArm){pDelArm=true;$('pDel').textContent='Точно?';clearTimeout(pDelT);pDelT=setTimeout(syncP,3000);return}
+  const n=userP[i].name;userP.splice(i,1);saveP();fillPresets('b_walk');toast('Пресет «'+n+'» удалён')};
+fillPresets('b_walk');
+
+// ---- play-test mode ----
+const game={on:false,x:0,z:0,face:0,state:'idle',t:0,prev:null,fade:1,out:{pose:{},drop:0},jx:0,jy:0,key:{},anim:{}};
+const NEUTRAL={pose:{},drop:0};
+const resolveA=id=>id==='cur'?clone(A):id==='none'?null:(findP(id)?clone(findP(id).data):null);
+function mixPose(a,b,s){const pose={};for(const n of ANIM_B){const x=a.pose[n]||[0,0,0],y=b.pose[n]||[0,0,0];pose[n]=[x[0]+(y[0]-x[0])*s,x[1]+(y[1]-x[1])*s,x[2]+(y[2]-x[2])*s]}return{pose,drop:(a.drop||0)+((b.drop||0)-(a.drop||0))*s,smoke:(a.smoke||0)+((b.smoke||0)-(a.smoke||0))*s}}
+function setState(s){if(game.state===s)return;game.prev=game.out;game.fade=0;game.state=s;game.t=0}
+function startGame(){
+  setClean(false);
+  if(stanceMode)setStanceMode(false);
+  stopPlay();endDrag();
+  game.anim={idle:resolveA($('gIdle').value),walk:resolveA($('gWalk').value),hit:resolveA($('gHit').value),hit2:resolveA($('gHit2').value),hit3:resolveA($('gHit3').value)};
+  const p=work.pos||[0,0];game.x=p[0];game.z=p[1];game.face=(work.rot||0)*D2R;
+  game.state='idle';game.t=0;game.prev=null;game.fade=1;game.on=true;
+  $('atk').style.display=game.anim.hit?'flex':'none';
+  $('atkName').textContent=game.anim.hit?String(game.anim.hit.name||'Действие').slice(0,11).toUpperCase():'';
+  $('atk3').style.display=game.anim.hit3?'flex':'none';$('atk3Name').textContent=game.anim.hit3?'МЕЧ':'';$('atk2').style.display=game.anim.hit2?'flex':'none';$('atk2Name').textContent=game.anim.hit2?String(game.anim.hit2.name||'Действие').split(' ')[0].slice(0,9).toUpperCase():'';
+  document.body.classList.add('game');gizmo.visible=false;pathLine.visible=pathDots.visible=false;
+  toast('Джойстик — ходить');
+}
+function exitGame(){if(!game.on)return;game.on=false;lookYaw=0;game.jx=game.jy=0;game.key={};$('knob').style.transform='';document.body.classList.remove('game');gizmo.visible=true;updatePath();refresh()}
+const oneShot=s=>s==='hit'||s==='hit2'||s==='hit3';
+function action(kind='hit'){const a=game.anim[kind];if(!game.on||!a||!a.keys.length)return;if(oneShot(game.state))return;setState(kind)}
+function gameStep(dt){
+  const k=game.key,an=game.anim;
+  let ix=game.jx+((k.KeyD||k.ArrowRight)?1:0)-((k.KeyA||k.ArrowLeft)?1:0);
+  let iy=game.jy+((k.KeyS||k.ArrowDown)?1:0)-((k.KeyW||k.ArrowUp)?1:0);
+  let m=Math.hypot(ix,iy);if(m>1){ix/=m;iy/=m;m=1}
+  game.lookT=0;
+  if(oneShot(game.state)){const a=an[game.state],t0=game.t;game.t+=dt;
+    // root motion from the animation's own movement, turned to where the character faces
+    const p0=sample(Math.min(t0,a.duration),a).pos,p1=sample(Math.min(game.t,a.duration),a).pos,dx=p1[0]-p0[0],dz=p1[1]-p0[1],c=Math.cos(game.face),s=Math.sin(game.face);
+    game.x=Math.max(-5.8,Math.min(5.8,game.x+dx*c+dz*s));game.z=Math.max(-5.8,Math.min(5.8,game.z-dx*s+dz*c));
+    if(game.t>=a.duration)setState(m>0.15?'walk':'idle')}
+  else if(m>0.15&&an.walk){
+    const fx=-Math.sin(yaw),fz=-Math.cos(yaw),rx=Math.cos(yaw),rz=-Math.sin(yaw);
+    const mx=rx*ix-fx*iy,mz=rz*ix-fz*iy,ml=Math.hypot(mx,mz)||1,sp=STRIDE/Math.max(0.3,an.walk.duration)*Math.max(0.45,m);
+    game.x=Math.max(-5.8,Math.min(5.8,game.x+mx/ml*sp*dt));game.z=Math.max(-5.8,Math.min(5.8,game.z+mz/ml*sp*dt));
+    let d=Math.atan2(mx,mz)-game.face;d=Math.atan2(Math.sin(d),Math.cos(d));game.face+=d*Math.min(1,dt*4.5);
+    game.lookT=Math.max(-0.7,Math.min(0.7,d*0.9));
+    setState('walk');game.t+=dt*Math.max(0.45,m);
+  }else{setState('idle');game.t+=dt}
+  const loopS=(a,t)=>a&&a.keys.length?sample(t%Math.max(0.05,a.duration),a):NEUTRAL;
+  const st=game.state;
+  {const a=st==='walk'?an.walk:oneShot(st)?an[st]:an.idle;game.useX=!(a&&a.useStance===false)}
+  const cur=oneShot(st)?sample(Math.min(game.t,an[st].duration),an[st]):st==='walk'?loopS(an.walk,game.t):loopS(an.idle,game.t);
+  breathAmt+=((oneShot(st)?0.25:st==='walk'?0.45:1)-breathAmt)*Math.min(1,dt*3);
+  lookYaw+=(game.lookT-lookYaw)*Math.min(1,dt*7);
+  game.fade+=dt;const s=ease(Math.min(1,game.fade/0.18));
+  const out=game.prev&&s<1?mixPose(game.prev,cur,s):cur;game.out=out;
+  work={pose:out.pose,drop:out.drop||0,smoke:out.smoke||0,pos:[game.x,game.z],rot:game.face/D2R};applyPose(work.pose,work.drop);
+}
+$('gStart').onclick=startGame;$('gQuick').onclick=startGame;$('gExit').onclick=exitGame;
+{
+  const joy=$('joy'),knob=$('knob');let jid=null;
+  const jm=e=>{const r=joy.getBoundingClientRect();let dx=e.clientX-(r.left+r.width/2),dy=e.clientY-(r.top+r.height/2);const R=r.width/2-12,l=Math.hypot(dx,dy);if(l>R){dx*=R/l;dy*=R/l}knob.style.transform=`translate(${dx}px,${dy}px)`;game.jx=dx/R;game.jy=dy/R};
+  joy.addEventListener('pointerdown',e=>{e.preventDefault();jid=e.pointerId;joy.setPointerCapture(e.pointerId);jm(e)});
+  joy.addEventListener('pointermove',e=>{if(e.pointerId===jid)jm(e)});
+  const je=e=>{if(e.pointerId!==jid)return;jid=null;game.jx=game.jy=0;knob.style.transform=''};
+  joy.addEventListener('pointerup',je);joy.addEventListener('pointercancel',je);
+  $('atk').addEventListener('pointerdown',e=>{e.preventDefault();action('hit')});
+  $('atk2').addEventListener('pointerdown',e=>{e.preventDefault();action('hit2')});
+  $('atk3').addEventListener('pointerdown',e=>{e.preventDefault();action('hit3')});
+  addEventListener('keydown',e=>{if(!game.on||/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;
+    if(e.code==='Space'||e.code==='KeyJ'){e.preventDefault();action('hit');return}
+    if(e.code==='KeyK'||e.code==='ShiftLeft'){action('hit2');return}
+    if(e.code==='KeyL'||e.code==='KeyF'){action('hit3');return}
+    if(e.code==='Escape'){exitGame();return}
+    game.key[e.code]=true;if(e.code.startsWith('Arrow'))e.preventDefault()});
+  addEventListener('keyup',e=>{delete game.key[e.code]});
+  addEventListener('blur',()=>{game.key={}});
+}
+
+// tap on the body selects the bone under the finger
+const ray=new THREE.Raycaster(),ndc=new THREE.Vector2();
+function exposed(b){while(b&&!LABEL[b.name])b=b.parent&&b.parent.isBone?b.parent:null;return b&&b.name}
+function pick(e){
+  if(!model||game.on||document.body.classList.contains('clean'))return;
+  ray.setFromCamera(ndcOf(e,ndc),camera);
+  const hit=ray.intersectObjects(meshes,false)[0];if(!hit||!hit.face)return;
+  const o=hit.object;if(!o.isSkinnedMesh){return}
+  const si=o.geometry.attributes.skinIndex,sw=o.geometry.attributes.skinWeight;
+  let best=0,bw=-1;for(let c=0;c<4;c++){const w=sw.getComponent(hit.face.a,c);if(w>bw){bw=w;best=si.getComponent(hit.face.a,c)}}
+  const n=exposed(o.skeleton.bones[best]);if(n){sel=n;syncUI();toast(LABEL[n])}
+}
+
+function init(){
+  let saved=null;try{saved=JSON.parse(ls.get(KEY)||'null')}catch(e){}
+  A=saved&&saved.keys&&!['Ходьба','Ходьба грозная','Ходьба спокойная'].includes(saved.name)?saved:clone(WALK);
+  drawMarks();refresh();if(isSimple())goFrame(nearestF());
+  let last=performance.now();
+  (function loop(now){
+    requestAnimationFrame(loop);const dt=Math.min(0.05,(now-last)/1000);last=now;
+    stepBreath(dt);keyPan(dt);
+    if(game.on)gameStep(dt);
+    else if(stanceMode&&stPreview){stT=(stT+dt)%WALK.duration;const s=sample(stT,WALK);work={pose:s.pose,fingers:{},drop:s.drop,smoke:0,pos:[0,0],rot:0};applyPose(work.pose,work.drop)}
+    else if(playing){time+=dt*(+$('speed').value);if(time>=A.duration){if(A.loop)time%=A.duration;else{time=A.duration;stopPlay()}}
+      const s=sample(time);work={pose:clone(s.pose),fingers:s.fingers?clone(s.fingers):{},drop:s.drop,smoke:s.smoke,pos:s.pos,rot:s.rot};applyPose(work.pose,work.drop);$('time').value=time;
+      $('tlabel').textContent=time.toFixed(2)+' / '+A.duration.toFixed(2)+' с'}
+    if(!game.on){breathAmt=playing||stPreview?0.6:1;if(!playing&&!(stanceMode&&stPreview)&&breathOn&&model)applyPose(work.pose,work.drop)}
+    player.updateMatrixWorld(true);
+    const sm=work.smoke||0;
+    smokeFx.emit('R',(feetOn?4:0)+sm*190,dt,bones.R_Hand,bones.R_Forearm,sm>0.05);
+    smokeFx.emit('L',feetOn?4:0,dt,bones.L_Hand,bones.L_Forearm,false);
+    if(sm>0.9&&prevSmoke<=0.9)smokeFx.burst(bones.R_Hand,bones.R_Forearm,60);prevSmoke=sm;
+    smokeFx.update(dt);
+    feetFx.step(dt,feetOn&&!!model,[bones.L_Foot,bones.R_Foot],[bones.L_ToeBase,bones.R_ToeBase]);
+    if(bones[sel])bones[sel].getWorldPosition(gizmo.position)
+    if(!camLocked&&(camFollow||game.on)){target.x+=(player.position.x+camOff.x-target.x)*0.12;target.z+=(player.position.z+camOff.z-target.z)*0.12}
+    sun.position.set(player.position.x+2.5,5,player.position.z+3.5);sun.target.position.set(player.position.x,0.8,player.position.z);
+    rim.position.set(player.position.x-1.5,3.2,player.position.z-4);rim.target.position.set(player.position.x,1,player.position.z);
+    placeCam();composer.render();
+  })(last);
+}
+}
+</script>
+</body>
+</html>

@@ -12,3 +12,9 @@
 Отдельный редактор с тем же интерфейсом: https://pzbtvjkpwg-hue.github.io/morgoth-/imper/
 
 - `imper/index.html`, `imper/imper.glb`, `imper/sword.glb`
+
+## Серебряный рыцарь
+
+Отдельный редактор: https://pzbtvjkpwg-hue.github.io/morgoth-/knight/
+
+- `knight/index.html`, `knight/knight.glb`, `knight/sword.glb`
