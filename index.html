@@ -58,6 +58,11 @@ details summary{min-height:44px;display:flex;align-items:center;color:var(--dim)
 .seg{display:flex;margin:6px 0}.seg button{flex:1;border-radius:0}.seg button:first-child{border-radius:10px 0 0 10px}.seg button:last-child{border-radius:0 10px 10px 0}
 .seg button.on{background:#3a3e47;outline:0;color:var(--acc)}
 body.simple .kOnly{display:none!important}
+.stOnly{display:none!important}
+body.stance .stOnly{display:flex!important}
+body.stance #panel>*:not(.stOK){display:none!important}
+body.stance #stEdit{background:var(--acc);border-color:var(--acc);color:#1a1008}
+.note{font-size:13px;color:var(--dim);margin:2px 0 6px}
 body:not(.simple) .fOnly{display:none!important}
 #pad{position:absolute;inset:0;display:none;pointer-events:none}
 body.game #pad{display:block}
@@ -101,19 +106,24 @@ body.game #app{grid-template-columns:minmax(0,1fr)!important;grid-template-rows:
     </div>
   </div>
   <div id="panel">
-    <div class="row"><select id="bsel" class="grow"></select><button id="bReset">Сброс</button></div>
-    <div class="ax"><label>Вперёд/назад</label><button data-a="0" data-d="-5">−</button><input type="range" id="ax0" min="-180" max="180" step="1"><button data-a="0" data-d="5">+</button><output id="o0">0°</output></div>
-    <div class="ax"><label>Поворот</label><button data-a="1" data-d="-5">−</button><input type="range" id="ax1" min="-180" max="180" step="1"><button data-a="1" data-d="5">+</button><output id="o1">0°</output></div>
-    <div class="ax"><label>В сторону</label><button data-a="2" data-d="-5">−</button><input type="range" id="ax2" min="-180" max="180" step="1"><button data-a="2" data-d="5">+</button><output id="o2">0°</output></div>
+    <div class="row stOK"><button id="stEdit" class="grow">🧍 Базовая стойка</button></div>
+    <div class="note stOnly stOK">Правишь стойку, на которой построены все анимации. Ноль на ползунках — выбранная стойка без твоих правок.</div>
+    <div class="row stOnly stOK"><select id="stSel" class="grow"></select><button id="stApply">Применить</button></div>
+    <div class="row stOnly stOK"><input type="text" id="stName" class="grow" placeholder="Название стойки" maxlength="40"><button id="stSave" class="acc">Сохранить</button></div>
+    <div class="row stOnly stOK"><button id="stSym" class="on">Симметрично</button><button id="stPrev">Показать в ходьбе</button><button id="stDel" class="warn">Удалить</button><button id="stReset" class="grow">Сбросить правки</button></div>
+    <div class="row stOK"><select id="bsel" class="grow"></select><button id="bReset">Сброс</button></div>
+    <div class="ax stOK"><label>Вперёд/назад</label><button data-a="0" data-d="-5">−</button><input type="range" id="ax0" min="-180" max="180" step="1"><button data-a="0" data-d="5">+</button><output id="o0">0°</output></div>
+    <div class="ax stOK"><label>Поворот</label><button data-a="1" data-d="-5">−</button><input type="range" id="ax1" min="-180" max="180" step="1"><button data-a="1" data-d="5">+</button><output id="o1">0°</output></div>
+    <div class="ax stOK"><label>В сторону</label><button data-a="2" data-d="-5">−</button><input type="range" id="ax2" min="-180" max="180" step="1"><button data-a="2" data-d="5">+</button><output id="o2">0°</output></div>
     <div class="ax"><label>Присед, м</label><button id="dm">−</button><input type="range" id="drop" min="-0.4" max="0.2" step="0.01"><button id="dp">+</button><output id="od">0.00</output></div>
     <div class="ax"><label>Дым из П руки</label><button id="sm">−</button><input type="range" id="smoke" min="0" max="1" step="0.05"><button id="sp">+</button><output id="osm">0.00</output></div>
 
-    <h4>Пальцы <span class="time">(к стойке; у левой руки в стойке кулак с мечом)</span></h4>
-    <div class="seg"><button id="fhL">Левая рука</button><button id="fhR" class="on">Правая рука</button></div>
-    <div class="row"><select id="fsel" class="grow"><option value="all">Все пальцы</option><option value="T">Большой</option><option value="I">Указательный</option><option value="M">Средний</option><option value="R">Безымянный</option><option value="P">Мизинец</option></select></div>
-    <div class="ax"><label>Сжатие</label><button id="fcm">−</button><input type="range" id="fcurl" min="-60" max="100" step="1"><button id="fcp">+</button><output id="ofc">0°</output></div>
-    <div class="ax"><label>Растопырка</label><button id="fsm">−</button><input type="range" id="fspread" min="-20" max="35" step="1"><button id="fsp">+</button><output id="ofs">0°</output></div>
-    <div class="row"><button id="fFist" class="grow">✊ Кулак</button><button id="fOpen" class="grow">🖐 Раскрыть</button><button id="fRest" class="grow">Как в стойке</button></div>
+    <h4 class="stOK">Пальцы <span class="time">(к стойке; у левой руки в стойке кулак с мечом)</span></h4>
+    <div class="seg stOK"><button id="fhL">Левая рука</button><button id="fhR" class="on">Правая рука</button></div>
+    <div class="row stOK"><select id="fsel" class="grow"><option value="all">Все пальцы</option><option value="T">Большой</option><option value="I">Указательный</option><option value="M">Средний</option><option value="R">Безымянный</option><option value="P">Мизинец</option></select></div>
+    <div class="ax stOK"><label>Сжатие</label><button id="fcm">−</button><input type="range" id="fcurl" min="-60" max="100" step="1"><button id="fcp">+</button><output id="ofc">0°</output></div>
+    <div class="ax stOK"><label>Растопырка</label><button id="fsm">−</button><input type="range" id="fspread" min="-20" max="35" step="1"><button id="fsp">+</button><output id="ofs">0°</output></div>
+    <div class="row stOK"><button id="fFist" class="grow">✊ Кулак</button><button id="fOpen" class="grow">🖐 Раскрыть</button><button id="fRest" class="grow">Как в стойке</button></div>
 
     <h4>Положение в пространстве</h4>
     <div class="ax"><label>Влево/вправо</label><button id="pxm">−</button><input type="range" id="px" min="-5" max="5" step="0.01"><button id="pxp">+</button><output id="opx">0.00</output></div>
@@ -410,7 +420,14 @@ const EYE_GLOW=1.6;
 function addEyes(){for(const o of meshes){const m=o.material;if(m&&m.emissiveMap){m.emissive.set(0xffffff);m.emissiveIntensity=EYE_GLOW;m.needsUpdate=true}}}
 
 const _e=new THREE.Euler(),_q=new THREE.Quaternion();
-const SQ={};for(const k in STANCE){const e=STANCE[k];SQ[k]=new THREE.Quaternion().setFromEuler(new THREE.Euler(e[0]*D2R,e[1]*D2R,e[2]*D2R))}
+// base stance = built-in stance + the user's edits (STX bone offsets, STXF finger settings); every animation sits on it
+const STKEY='morgothStanceCur',STPKEY='morgothStances';
+let STX={},STXF={},stCurId='st_main';
+try{const c=JSON.parse(ls.get(STKEY)||'null');if(c){STX=c.x||{};STXF=c.f||{};stCurId=c.id||'st_main'}}catch(e){}
+const SQ={};
+function rebuildStance(){for(const k in SQ)delete SQ[k];const qe=e=>new THREE.Quaternion().setFromEuler(new THREE.Euler(e[0]*D2R,e[1]*D2R,e[2]*D2R));
+  for(const k of new Set([...Object.keys(STANCE),...Object.keys(STX)])){const q=STX[k]?qe(STX[k]):new THREE.Quaternion();if(STANCE[k])q.multiply(qe(STANCE[k]));SQ[k]=q}}
+rebuildStance();
 // ---- breathing: a slow additive layer on top of any pose (not stored in animations) ----
 const BREATH={Spine01:[-0.8,0,0],Spine02:[-1.9,0,0],L_Clavicle:[0,0,1.5],R_Clavicle:[0,0,-1.5],L_Upperarm:[0,0,0.6],R_Upperarm:[0,0,-0.6],NeckTwist01:[0.9,0,0],Head:[1.1,0,0]};
 const BREATH_T=3.6;let breathOn=ls.get('morgothBreath')!=='0',breathT=0,breathS=0,breathAmt=1;
@@ -469,7 +486,7 @@ const bsel=$('bsel');bsel.innerHTML=BONES.map(b=>`<option value="${b}">${LABEL[b
 const isSimple=()=>document.body.classList.contains('simple');
 function syncUI(){
   bsel.value=sel;$('bname').textContent=LABEL[sel];
-  const e=work.pose[sel]||[0,0,0];
+  const e=(stanceMode?STX[sel]:work.pose[sel])||[0,0,0];
   for(let a=0;a<3;a++){$('ax'+a).value=Math.round(e[a]);$('o'+a).textContent=Math.round(e[a])+'°'}
   $('drop').value=work.drop;$('od').textContent=(+work.drop).toFixed(2);
   syncFingers();
@@ -497,17 +514,17 @@ function updatePath(){
   pathDots.geometry.dispose();pathDots.geometry=new THREE.BufferGeometry().setAttribute('position',attr.clone());
 }
 const stopPlay=()=>{playing=false;$('play').textContent='▶ Пуск'};
-function setAxis(a,v){stopPlay();v=Math.max(-180,Math.min(180,v));const e=work.pose[sel]?[...work.pose[sel]]:[0,0,0];e[a]=v;work.pose[sel]=e;applyPose(work.pose,work.drop);commitEdit();syncUI()}
+function setAxis(a,v){if(stanceMode)return setStanceAxis(a,v);stopPlay();v=Math.max(-180,Math.min(180,v));const e=work.pose[sel]?[...work.pose[sel]]:[0,0,0];e[a]=v;work.pose[sel]=e;applyPose(work.pose,work.drop);commitEdit();syncUI()}
 for(let a=0;a<3;a++)$('ax'+a).addEventListener('input',e=>setAxis(a,+e.target.value));
-document.querySelectorAll('.ax button[data-a]').forEach(b=>b.addEventListener('click',()=>{const a=+b.dataset.a;const e=work.pose[sel]||[0,0,0];setAxis(a,Math.round(e[a])+ +b.dataset.d)}));
+document.querySelectorAll('.ax button[data-a]').forEach(b=>b.addEventListener('click',()=>{const a=+b.dataset.a;const e=(stanceMode?STX[sel]:work.pose[sel])||[0,0,0];setAxis(a,Math.round(e[a])+ +b.dataset.d)}));
 const setDrop=v=>{stopPlay();work.drop=Math.max(-0.4,Math.min(0.2,+(+v).toFixed(2)));applyPose(work.pose,work.drop);commitEdit();syncUI()};
 // ---- finger controls ----
 let fHand='R';
-function curHand(){work.fingers=work.fingers||{};return work.fingers[fHand]||(work.fingers[fHand]=emptyHand())}
-function syncFingers(){const m=(work.fingers||{})[fHand]||emptyHand(),f=$('fsel').value;
+function curHand(){if(stanceMode)return STXF[fHand]||(STXF[fHand]=emptyHand());work.fingers=work.fingers||{};return work.fingers[fHand]||(work.fingers[fHand]=emptyHand())}
+function syncFingers(){const m=(stanceMode?STXF:(work.fingers||{}))[fHand]||emptyHand(),f=$('fsel').value;
   const c=f==='all'?Math.round((m.I+m.M+m.R+m.P)/4):m[f];$('fcurl').value=c;$('ofc').textContent=Math.round(c)+'°';
   const sp=f==='T'?(m.TS||0):m.S;$('fspread').value=sp;$('ofs').textContent=Math.round(sp)+'°';$('fhL').classList.toggle('on',fHand==='L');$('fhR').classList.toggle('on',fHand==='R')}
-function applyFingers(){stopPlay();fingersToPose(work.pose,fHand,curHand());applyPose(work.pose,work.drop);commitEdit();syncUI()}
+function applyFingers(){if(stanceMode){fingersToPose(STX,fHand,curHand());saveStance();return}stopPlay();fingersToPose(work.pose,fHand,curHand());applyPose(work.pose,work.drop);commitEdit();syncUI()}
 const setCurl=v=>{const m=curHand(),f=$('fsel').value;v=Math.max(-60,Math.min(100,Math.round(+v)));if(f==='all')for(const k of ['I','M','R','P'])m[k]=v;else m[f]=v;applyFingers()};
 const setSpread=v=>{const m=curHand();v=Math.max(-20,Math.min(35,Math.round(+v)));if($('fsel').value==='T')m.TS=v;else m.S=v;applyFingers()};
 $('fcurl').addEventListener('input',e=>setCurl(e.target.value));$('fspread').addEventListener('input',e=>setSpread(e.target.value));
@@ -518,7 +535,7 @@ $('fsel').addEventListener('change',syncFingers);
 // for the left hand the stance already holds the sword in a fist, so "fist" there means no extra curl
 $('fFist').onclick=()=>{const m=curHand(),c=fHand==='L'?0:80;Object.assign(m,{I:c,M:c,R:c,P:c,T:fHand==='L'?0:40,S:0,TS:0});applyFingers()};
 $('fOpen').onclick=()=>{const m=curHand(),c=fHand==='L'?-70:-10;Object.assign(m,{I:c,M:c,R:c,P:c,T:fHand==='L'?-20:-8,S:12,TS:fHand==='L'?30:10});applyFingers()};
-$('fRest').onclick=()=>{work.fingers=work.fingers||{};work.fingers[fHand]=emptyHand();applyFingers()};
+$('fRest').onclick=()=>{if(stanceMode){STXF[fHand]=emptyHand()}else{work.fingers=work.fingers||{};work.fingers[fHand]=emptyHand()}applyFingers()};
 const setSmoke=v=>{stopPlay();work.smoke=Math.max(0,Math.min(1,+(+v).toFixed(2)));commitEdit();syncUI()};
 $('smoke').addEventListener('input',e=>setSmoke(e.target.value));$('sm').onclick=()=>setSmoke((work.smoke||0)-0.05);$('sp').onclick=()=>setSmoke((work.smoke||0)+0.05);
 $('drop').addEventListener('input',e=>setDrop(e.target.value));$('dm').onclick=()=>setDrop(work.drop-0.01);$('dp').onclick=()=>setDrop(work.drop+0.01);
@@ -541,9 +558,9 @@ $('swordBtn').classList.toggle('on',swordOn);
 $('swordBtn').onclick=()=>{swordOn=!swordOn;ls.set('morgothSword',swordOn?'1':'0');$('swordBtn').classList.toggle('on',swordOn);if(swordObj)swordObj.visible=swordOn};
 $('camFollow').onclick=()=>{camFollow=!camFollow;$('camFollow').classList.toggle('on',camFollow);if(!camFollow){target.x=0;target.z=0}};
 bsel.addEventListener('change',()=>{sel=bsel.value;syncUI()});
-$('bReset').onclick=()=>{delete work.pose[sel];applyPose(work.pose,work.drop);commitEdit();syncUI()};
+$('bReset').onclick=()=>{if(stanceMode){delete STX[sel];const m=mirrorName(sel);if(stSym&&m!==sel)delete STX[m];saveStance();return}delete work.pose[sel];applyPose(work.pose,work.drop);commitEdit();syncUI()};
 $('time').addEventListener('input',e=>{stopPlay();time=+e.target.value;refresh()});
-$('play').onclick=()=>{playing=!playing;if(playing&&time>=A.duration-0.01){time=0}$('play').textContent=playing?'❚❚ Пауза':'▶ Пуск'};
+$('play').onclick=()=>{if(stanceMode)return;playing=!playing;if(playing&&time>=A.duration-0.01){time=0}$('play').textContent=playing?'❚❚ Пауза':'▶ Пуск'};
 $('prev').onclick=()=>{const k=[...A.keys].reverse().find(k=>k.t<time-0.026);time=k?k.t:0;stopPlay();refresh()};
 $('next').onclick=()=>{const k=A.keys.find(k=>k.t>time+0.026);time=k?k.t:A.duration;stopPlay();refresh()};
 $('addKey').onclick=()=>{commitEdit();toast('Ключ на '+time.toFixed(2)+' с')};
@@ -559,6 +576,36 @@ $('doExport').onclick=()=>{$('json').value=JSON.stringify(A)};
 $('doCopy').onclick=()=>{const t=JSON.stringify(A);$('json').value=t;navigator.clipboard.writeText(t).then(()=>toast('JSON скопирован')).catch(()=>{$('json').select();toast('Выделено — скопируйте вручную')})};
 $('doImport').onclick=()=>{try{const o=JSON.parse($('json').value);if(!o.keys||!o.duration)throw 0;o.keys.sort((a,b)=>a.t-b.t);stopPlay();A=o;time=0;save();drawMarks();refresh();toast('Анимация загружена')}catch(e){toast('Не похоже на JSON анимации')}};
 function toast(t){const el=$('toast');el.textContent=t;el.style.opacity=1;clearTimeout(toast.h);toast.h=setTimeout(()=>el.style.opacity=0,1600)}
+
+// ---- base stance editing, saving and switching ----
+let stanceMode=false,stSym=true,stPreview=false,stT=0;
+const mirrorName=k=>k.startsWith('L_')?'R_'+k.slice(2):k.startsWith('R_')?'L_'+k.slice(2):k;
+let userSt=[];try{userSt=JSON.parse(ls.get(STPKEY)||'[]')||[]}catch(e){userSt=[]}
+const ST_BUILTIN=[{id:'st_main',name:'Основная',x:{},f:{},builtin:true}];
+const allSt=()=>[...ST_BUILTIN,...userSt],findSt=id=>allSt().find(s=>s.id===id);
+function persistCur(){ls.set(STKEY,JSON.stringify({id:stCurId,x:STX,f:STXF}))}
+function saveStance(){for(const k in STX)if(STX[k].every(v=>v===0))delete STX[k];persistCur();rebuildStance();showStance();syncUI()}
+function setStanceAxis(a,v){v=Math.max(-90,Math.min(90,Math.round(v)));const e=STX[sel]?[...STX[sel]]:[0,0,0];e[a]=v;STX[sel]=e;
+  const m=mirrorName(sel);if(stSym&&m!==sel)STX[m]=[e[0],-e[1],-e[2]];saveStance()}
+function showStance(){if(!stanceMode||stPreview)return;work={pose:{},fingers:{},drop:0,smoke:0,pos:[0,0],rot:0};applyPose(work.pose,0)}
+let stDelArm=false,stDelT=0;
+function fillSt(){const s=$('stSel');s.innerHTML=allSt().map(p=>`<option value="${p.id}">${p.builtin?'🔒 ':''}${esc(p.name)}</option>`).join('');s.value=findSt(stCurId)?stCurId:'st_main';syncStBtns()}
+function syncStBtns(){const p=findSt($('stSel').value);$('stDel').disabled=!p||p.builtin;stDelArm=false;clearTimeout(stDelT);$('stDel').textContent='Удалить'}
+function setStanceMode(on){if(game.on)return;stanceMode=on;stopPlay();document.body.classList.toggle('stance',on);
+  $('stEdit').textContent=on?'✓ Готово — выйти из стойки':'🧍 Базовая стойка';stPreview=false;$('stPrev').classList.remove('on');
+  if(on){fillSt();$('panel').scrollTop=0;showStance();syncUI();toast('Правка базовой стойки')}else{refresh();toast('Стойка применена ко всем анимациям')}}
+$('stEdit').onclick=()=>setStanceMode(!stanceMode);
+$('stSym').onclick=()=>{stSym=!stSym;$('stSym').classList.toggle('on',stSym)};
+$('stPrev').onclick=()=>{stPreview=!stPreview;$('stPrev').classList.toggle('on',stPreview);stT=0;showStance()};
+$('stReset').onclick=()=>{const p=findSt(stCurId)||ST_BUILTIN[0];STX=clone(p.x||{});STXF=clone(p.f||{});saveStance();toast('Правки сброшены')};
+$('stSel').addEventListener('change',syncStBtns);
+$('stApply').onclick=()=>{const p=findSt($('stSel').value);if(!p)return;stCurId=p.id;STX=clone(p.x||{});STXF=clone(p.f||{});saveStance();toast('Стойка: '+p.name)};
+$('stSave').onclick=()=>{const n=$('stName').value.trim()||('Стойка '+(userSt.length+1));const p={id:'us'+Date.now().toString(36),name:n,x:clone(STX),f:clone(STXF)};
+  userSt.push(p);ls.set(STPKEY,JSON.stringify(userSt));stCurId=p.id;persistCur();$('stName').value='';$('stName').blur();fillSt();toast('Стойка «'+n+'» сохранена')};
+$('stDel').onclick=()=>{const i=userSt.findIndex(p=>p.id===$('stSel').value);if(i<0)return;
+  if(!stDelArm){stDelArm=true;$('stDel').textContent='Точно?';stDelT=setTimeout(syncStBtns,3000);return}
+  const n=userSt[i].name,wasCur=userSt[i].id===stCurId;userSt.splice(i,1);ls.set(STPKEY,JSON.stringify(userSt));
+  if(wasCur){stCurId='st_main';STX={};STXF={};saveStance()}fillSt();toast('Стойка «'+n+'» удалена')};
 
 // ---- simple frames mode ----
 const curF=()=>keyAt(time);
@@ -619,6 +666,7 @@ const resolveA=id=>id==='cur'?clone(A):id==='none'?null:(findP(id)?clone(findP(i
 function mixPose(a,b,s){const pose={};for(const n of ANIM_B){const x=a.pose[n]||[0,0,0],y=b.pose[n]||[0,0,0];pose[n]=[x[0]+(y[0]-x[0])*s,x[1]+(y[1]-x[1])*s,x[2]+(y[2]-x[2])*s]}return{pose,drop:(a.drop||0)+((b.drop||0)-(a.drop||0))*s,smoke:(a.smoke||0)+((b.smoke||0)-(a.smoke||0))*s}}
 function setState(s){if(game.state===s)return;game.prev=game.out;game.fade=0;game.state=s;game.t=0}
 function startGame(){
+  if(stanceMode)setStanceMode(false);
   stopPlay();endDrag();
   game.anim={idle:resolveA($('gIdle').value),walk:resolveA($('gWalk').value),hit:resolveA($('gHit').value),hit2:resolveA($('gHit2').value)};
   const p=work.pos||[0,0];game.x=p[0];game.z=p[1];game.face=(work.rot||0)*D2R;
@@ -701,10 +749,11 @@ function init(){
     requestAnimationFrame(loop);const dt=Math.min(0.05,(now-last)/1000);last=now;
     stepBreath(dt);
     if(game.on)gameStep(dt);
+    else if(stanceMode&&stPreview){stT=(stT+dt)%WALK.duration;const s=sample(stT,WALK);work={pose:s.pose,fingers:{},drop:s.drop,smoke:0,pos:[0,0],rot:0};applyPose(work.pose,work.drop)}
     else if(playing){time+=dt*(+$('speed').value);if(time>=A.duration){if(A.loop)time%=A.duration;else{time=A.duration;stopPlay()}}
       const s=sample(time);work={pose:clone(s.pose),fingers:s.fingers?clone(s.fingers):{},drop:s.drop,smoke:s.smoke,pos:s.pos,rot:s.rot};applyPose(work.pose,work.drop);$('time').value=time;
       $('tlabel').textContent=time.toFixed(2)+' / '+A.duration.toFixed(2)+' с'}
-    if(!game.on){breathAmt=playing?0.6:1;if(!playing&&breathOn&&model)applyPose(work.pose,work.drop)}
+    if(!game.on){breathAmt=playing||stPreview?0.6:1;if(!playing&&!(stanceMode&&stPreview)&&breathOn&&model)applyPose(work.pose,work.drop)}
     player.updateMatrixWorld(true);
     const sm=work.smoke||0;
     smokeFx.emit('R',(feetOn?4:0)+sm*190,dt,bones.R_Hand,bones.R_Forearm,sm>0.05);
