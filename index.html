@@ -195,6 +195,7 @@ body.game #app{grid-template-columns:minmax(0,1fr)!important;grid-template-rows:
     <div class="row"><button id="gStart" class="acc grow">🎮 Играть</button></div>
 
     <h4>Файл</h4>
+    <div class="row"><button id="exportAll" class="acc grow">📦 Копировать всё (пресеты, стойка, телосложение)</button></div>
     <details><summary>Экспорт / импорт (JSON)</summary>
       <div class="row"><button id="doExport" class="grow">Показать JSON</button><button id="doCopy" class="grow">Копировать</button></div>
       <textarea id="json" placeholder="Вставьте сюда JSON анимации"></textarea>
@@ -610,6 +611,10 @@ $('dur').addEventListener('change',e=>{const d=Math.max(0.2,Math.min(20,+e.targe
 $('loop').onclick=()=>{A.loop=!A.loop;save();syncUI()};
 $('useSt').onclick=()=>{A.useStance=A.useStance===false;save();applyPose(work.pose,work.drop);syncUI();toast(A.useStance===false?'Эта анимация — без правок стойки':'Эта анимация — со стойкой')};
 $('newA').onclick=()=>{stopPlay();A=newAnim();time=0;save();drawMarks();refresh();toast('Новая анимация из базовой стойки')};
+$('exportAll').onclick=()=>{
+  const pack={kind:'morgoth-backup',when:new Date().toISOString(),presets:userP,stances:userSt,stance:{id:stCurId,x:STX,f:STXF},build:{...build},buildPresets:userB,current:A};
+  const s=JSON.stringify(pack);$('json').value=s;$('json').closest('details').open=true;
+  navigator.clipboard.writeText(s).then(()=>toast('Всё скопировано — вставь в чат')).catch(()=>{$('json').select();toast('Выделено — скопируй вручную')})};
 $('doExport').onclick=()=>{$('json').value=JSON.stringify(A)};
 $('doCopy').onclick=()=>{const t=JSON.stringify(A);$('json').value=t;navigator.clipboard.writeText(t).then(()=>toast('JSON скопирован')).catch(()=>{$('json').select();toast('Выделено — скопируйте вручную')})};
 $('doImport').onclick=()=>{try{const o=JSON.parse($('json').value);if(!o.keys||!o.duration)throw 0;o.keys.sort((a,b)=>a.t-b.t);stopPlay();A=o;time=0;save();drawMarks();refresh();toast('Анимация загружена')}catch(e){toast('Не похоже на JSON анимации')}};
