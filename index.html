@@ -136,8 +136,8 @@ body.game #app{grid-template-columns:minmax(0,1fr)!important;grid-template-rows:
     <h4 class="stOK">Пальцы <span class="time">(к стойке; у левой руки в стойке кулак с мечом)</span></h4>
     <div class="seg stOK"><button id="fhL">Левая рука</button><button id="fhR" class="on">Правая рука</button></div>
     <div class="row stOK"><select id="fsel" class="grow"><option value="all">Все пальцы</option><option value="T">Большой</option><option value="I">Указательный</option><option value="M">Средний</option><option value="R">Безымянный</option><option value="P">Мизинец</option></select></div>
-    <div class="ax stOK"><label>Сжатие</label><button id="fcm">−</button><input type="range" id="fcurl" min="-60" max="100" step="1"><button id="fcp">+</button><output id="ofc">0°</output></div>
-    <div class="ax stOK"><label>Растопырка</label><button id="fsm">−</button><input type="range" id="fspread" min="-20" max="35" step="1"><button id="fsp">+</button><output id="ofs">0°</output></div>
+    <div class="ax stOK"><label>Сжатие</label><button id="fcm">−</button><input type="range" id="fcurl" min="-110" max="140" step="1"><button id="fcp">+</button><output id="ofc">0°</output></div>
+    <div class="ax stOK"><label>Растопырка</label><button id="fsm">−</button><input type="range" id="fspread" min="-45" max="75" step="1"><button id="fsp">+</button><output id="ofs">0°</output></div>
     <div class="row stOK"><button id="fFist" class="grow">✊ Кулак</button><button id="fOpen" class="grow">🖐 Раскрыть</button><button id="fRest" class="grow">Как в стойке</button></div>
 
     <h4>Положение в пространстве</h4>
@@ -168,6 +168,7 @@ body.game #app{grid-template-columns:minmax(0,1fr)!important;grid-template-rows:
       <span class="time">Скорость</span><select id="speed"><option>0.25</option><option>0.5</option><option selected>1</option><option>2</option></select>
       <button id="loop">Повтор</button>
     </div>
+    <div class="row"><button id="useSt" class="on grow">🧍 Со стойкой</button><span class="time">выкл — анимация на исходной стойке, без твоих правок</span></div>
 
     <h4>Телосложение</h4>
     <div class="ax"><label>Туловище</label><button data-b="torso" data-d="-0.02">−</button><input type="range" id="b_torso" min="0.65" max="1" step="0.01"><button data-b="torso" data-d="0.02">+</button><output id="o_torso">84%</output></div>
@@ -445,9 +446,9 @@ const _e=new THREE.Euler(),_q=new THREE.Quaternion();
 const STKEY='morgothStanceCur',STPKEY='morgothStances';
 let STX={},STXF={},stCurId='st_main';
 try{const c=JSON.parse(ls.get(STKEY)||'null');if(c){STX=c.x||{};STXF=c.f||{};stCurId=c.id||'st_main'}}catch(e){}
-const SQ={};
-function rebuildStance(){for(const k in SQ)delete SQ[k];const qe=e=>new THREE.Quaternion().setFromEuler(new THREE.Euler(e[0]*D2R,e[1]*D2R,e[2]*D2R));
-  for(const k of new Set([...Object.keys(STANCE),...Object.keys(STX)])){const q=STX[k]?qe(STX[k]):new THREE.Quaternion();if(STANCE[k])q.multiply(qe(STANCE[k]));SQ[k]=q}}
+const SQ={},SQB={};
+function rebuildStance(){for(const k in SQ)delete SQ[k];for(const k in SQB)delete SQB[k];const qe=e=>new THREE.Quaternion().setFromEuler(new THREE.Euler(e[0]*D2R,e[1]*D2R,e[2]*D2R));
+  for(const k of new Set([...Object.keys(STANCE),...Object.keys(STX)])){const q=STX[k]?qe(STX[k]):new THREE.Quaternion();if(STANCE[k]){q.multiply(qe(STANCE[k]));SQB[k]=qe(STANCE[k])}SQ[k]=q}}
 rebuildStance();
 // ---- breathing: a slow additive layer on top of any pose (not stored in animations) ----
 const BREATH={Spine01:[-0.8,0,0],Spine02:[-1.9,0,0],L_Clavicle:[0,0,1.5],R_Clavicle:[0,0,-1.5],L_Upperarm:[0,0,0.6],R_Upperarm:[0,0,-0.6],NeckTwist01:[0.9,0,0],Head:[1.1,0,0]};
@@ -460,9 +461,11 @@ function stepBreath(dt){breathT+=dt;const ph=(breathT%BREATH_T)/BREATH_T;
 const LOOK={Head:0.55,NeckTwist01:0.3,Spine02:0.15};let lookYaw=0;
 // pose values are offsets on top of the base stance (arms down, level shoulders)
 function applyPose(pose,drop){
+  // user's stance edits apply unless the animation playing (editor or game) opted out
+  const useX=stanceMode||(game.on?game.useX!==false:!(A&&A.useStance===false)),SQ_=useX?SQ:SQB;
   for(const k in K){const c=K[k],e=pose[k];
     if(e){_e.set(e[0]*D2R,e[1]*D2R,e[2]*D2R);_q.setFromEuler(_e)}else _q.identity();
-    if(SQ[k])_q.multiply(SQ[k]);
+    if(SQ_[k])_q.multiply(SQ_[k]);
     if(lookYaw&&LOOK[k])_q.premultiply(_bq.setFromAxisAngle(_yAx,lookYaw*LOOK[k]));
     const br=breathOn&&BREATH[k];if(br){const s=breathS*breathAmt*D2R;_be.set(br[0]*s,br[1]*s,br[2]*s);_q.premultiply(_bq.setFromEuler(_be))}
     bones[k].quaternion.copy(c.P0i).multiply(_q).multiply(c.P0).multiply(c.L0)}
@@ -515,7 +518,7 @@ function syncUI(){
   const wp=work.pos||[0,0];$('px').value=wp[0];$('opx').textContent=wp[0].toFixed(2);$('pz').value=wp[1];$('opz').textContent=wp[1].toFixed(2);
   $('pr').value=Math.round(work.rot||0);$('opr').textContent=Math.round(work.rot||0)+'°';
   $('time').max=A.duration;$('time').value=time;$('tlabel').textContent=time.toFixed(2)+' / '+A.duration.toFixed(2)+' с';
-  $('dur').value=A.duration;$('loop').classList.toggle('on',!!A.loop);
+  $('dur').value=A.duration;$('loop').classList.toggle('on',!!A.loop);$('useSt').classList.toggle('on',A.useStance!==false);
   const k=keyAt(time);$('addKey').textContent=k>=0?'Ключ обновлён ✓':'+ Ключ здесь';$('delKey').disabled=k<0;$('fDel').disabled=k<0;
   [...$('marks').children].forEach((m,i)=>m.classList.toggle('cur',i===k));
   [...$('frames').children].forEach((b,i)=>b.classList.toggle('on',i===k));
@@ -546,8 +549,8 @@ function syncFingers(){const m=(stanceMode?STXF:(work.fingers||{}))[fHand]||empt
   const c=f==='all'?Math.round((m.I+m.M+m.R+m.P)/4):m[f];$('fcurl').value=c;$('ofc').textContent=Math.round(c)+'°';
   const sp=f==='T'?(m.TS||0):m.S;$('fspread').value=sp;$('ofs').textContent=Math.round(sp)+'°';$('fhL').classList.toggle('on',fHand==='L');$('fhR').classList.toggle('on',fHand==='R')}
 function applyFingers(){if(stanceMode){fingersToPose(STX,fHand,curHand());saveStance();return}stopPlay();fingersToPose(work.pose,fHand,curHand());applyPose(work.pose,work.drop);commitEdit();syncUI()}
-const setCurl=v=>{const m=curHand(),f=$('fsel').value;v=Math.max(-60,Math.min(100,Math.round(+v)));if(f==='all')for(const k of ['I','M','R','P'])m[k]=v;else m[f]=v;applyFingers()};
-const setSpread=v=>{const m=curHand();v=Math.max(-20,Math.min(35,Math.round(+v)));if($('fsel').value==='T')m.TS=v;else m.S=v;applyFingers()};
+const setCurl=v=>{const m=curHand(),f=$('fsel').value;v=Math.max(-110,Math.min(140,Math.round(+v)));if(f==='all')for(const k of ['I','M','R','P'])m[k]=v;else m[f]=v;applyFingers()};
+const setSpread=v=>{const m=curHand();v=Math.max(-45,Math.min(75,Math.round(+v)));if($('fsel').value==='T')m.TS=v;else m.S=v;applyFingers()};
 $('fcurl').addEventListener('input',e=>setCurl(e.target.value));$('fspread').addEventListener('input',e=>setSpread(e.target.value));
 $('fcm').onclick=()=>setCurl(+$('fcurl').value-5);$('fcp').onclick=()=>setCurl(+$('fcurl').value+5);
 $('fsm').onclick=()=>setSpread(+$('fspread').value-3);$('fsp').onclick=()=>setSpread(+$('fspread').value+3);
@@ -598,6 +601,7 @@ $('pasteKey').onclick=()=>{if(!clipPose)return toast('Сначала скопи�
 $('mirror').onclick=()=>{stopPlay();const m={};for(const k in work.pose){const e=work.pose[k];const t=k.startsWith('L_')?'R_'+k.slice(2):k.startsWith('R_')?'L_'+k.slice(2):k;m[t]=[e[0],-e[1],-e[2]]}work.pose=m;if(work.fingers){const f=work.fingers;work.fingers={};if(f.L)work.fingers.R=f.L;if(f.R)work.fingers.L=f.R}applyPose(work.pose,work.drop);commitEdit();syncUI();toast('Поза отзеркалена')};
 $('dur').addEventListener('change',e=>{const d=Math.max(0.2,Math.min(20,+e.target.value||2));const f=d/A.duration;A.keys.forEach(k=>k.t=+(k.t*f).toFixed(3));A.duration=d;time=Math.min(time*f,d);save();drawMarks();refresh()});
 $('loop').onclick=()=>{A.loop=!A.loop;save();syncUI()};
+$('useSt').onclick=()=>{A.useStance=A.useStance===false;save();applyPose(work.pose,work.drop);syncUI();toast(A.useStance===false?'Эта анимация — без правок стойки':'Эта анимация — со стойкой')};
 $('newA').onclick=()=>{stopPlay();A=newAnim();time=0;save();drawMarks();refresh();toast('Новая анимация из базовой стойки')};
 $('doExport').onclick=()=>{$('json').value=JSON.stringify(A)};
 $('doCopy').onclick=()=>{const t=JSON.stringify(A);$('json').value=t;navigator.clipboard.writeText(t).then(()=>toast('JSON скопирован')).catch(()=>{$('json').select();toast('Выделено — скопируйте вручную')})};
@@ -729,6 +733,7 @@ function gameStep(dt){
   }else{setState('idle');game.t+=dt}
   const loopS=(a,t)=>a&&a.keys.length?sample(t%Math.max(0.05,a.duration),a):NEUTRAL;
   const st=game.state;
+  {const a=st==='walk'?an.walk:oneShot(st)?an[st]:an.idle;game.useX=!(a&&a.useStance===false)}
   const cur=oneShot(st)?sample(Math.min(game.t,an[st].duration),an[st]):st==='walk'?loopS(an.walk,game.t):loopS(an.idle,game.t);
   breathAmt+=((oneShot(st)?0.25:st==='walk'?0.45:1)-breathAmt)*Math.min(1,dt*3);
   lookYaw+=(game.lookT-lookYaw)*Math.min(1,dt*7);
