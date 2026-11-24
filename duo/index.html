@@ -379,7 +379,11 @@ function endDrag(){if(!dragging)return;dragging=null;commitEdit();syncUI()}
 // ---- assets: embedded base64 when present, otherwise a .glb next to the page ----
 function getGLB(name){const tag=document.getElementById('b64_'+name);
   if(tag){const bin=atob(tag.textContent.replace(/\s+/g,'')),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return Promise.resolve(u.buffer)}
-  return fetch(name+'.glb').then(r=>{if(!r.ok)throw new Error(name+'.glb: HTTP '+r.status);return r.arrayBuffer()})}
+  return fetch(name+'.glb',{cache:'force-cache'}).then(async r=>{if(!r.ok)throw new Error(name+'.glb: HTTP '+r.status);
+    const total=+r.headers.get('content-length')||0,show=name===CHAR.id&&r.body&&r.body.getReader;if(!show)return r.arrayBuffer();
+    const rd=r.body.getReader(),parts=[];let got=0;const L=$('load'),mb=x=>(x/1048576).toFixed(1);
+    for(;;){const {done,value}=await rd.read();if(done)break;parts.push(value);got+=value.length;L.textContent='Загрузка модели… '+mb(got)+(total?' / '+mb(total):'')+' МБ'}
+    L.textContent='Сборка модели…';const u=new Uint8Array(got);let o=0;for(const p of parts){u.set(p,o);o+=p.length}return u.buffer})}
 
 // ---- model ----
 let model=null,bones={},K={},meshes=[];
