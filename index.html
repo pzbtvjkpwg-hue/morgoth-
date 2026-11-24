@@ -22,8 +22,13 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:15px/1
 #bonetag b{color:var(--acc)}
 #hintv{position:absolute;right:10px;top:8px;font-size:12px;color:var(--dim);text-align:right;pointer-events:none}
 #vtools{position:absolute;left:10px;bottom:10px;display:flex;gap:8px;flex-wrap:wrap}
-#vtools button{background:rgba(20,21,25,.75);backdrop-filter:blur(6px)}
-#vtools button.on{background:var(--acc);color:#1a1008;outline:0}
+#vtools button{background:rgba(20,21,25,.32);border-color:rgba(255,255,255,.12);color:rgba(236,234,230,.8);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+#vtools button.on{background:rgba(255,122,46,.38);border-color:rgba(255,122,46,.55);color:#fff;outline:0}
+#bonetag{opacity:.8}
+#uiBack{position:absolute;right:calc(10px + env(safe-area-inset-right));top:8px;display:none;min-height:40px;padding:0 12px;background:rgba(20,21,25,.22);border:1px solid rgba(255,255,255,.12);color:rgba(236,234,230,.55);border-radius:10px;font-size:15px}
+body.clean #uiBack{display:block}
+body.clean #panel,body.clean #vtools,body.clean #bonetag,body.clean #hintv{display:none!important}
+body.clean #app{grid-template-columns:minmax(0,1fr)!important;grid-template-rows:minmax(0,1fr)!important}
 #panel{background:var(--panel);border-top:1px solid var(--line);max-height:50vh;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:10px 12px calc(10px + env(safe-area-inset-bottom))}
 .row{display:flex;gap:8px;align-items:center;margin:6px 0;flex-wrap:wrap}
 .row>*{flex:none}
@@ -96,7 +101,8 @@ body.game #app{grid-template-columns:minmax(0,1fr)!important;grid-template-rows:
   <div id="view">
     <div id="bonetag">Кость: <b id="bname">—</b></div>
     <div id="hintv">тап по телу — выбрать часть<br>палец — вращать камеру · два пальца — зум</div>
-    <div id="vtools"><button id="mvMode">✥ Двигать</button><button id="camFollow" class="on">🎥 Следить</button><button id="gQuick">🎮 Играть</button><button id="breathBtn" class="on">💨 Дыхание</button><button id="feetBtn" class="on">🌫 Дым</button><button id="swordBtn" class="on">🗡 Меч</button></div>
+    <div id="vtools"><button id="mvMode">✥ Двигать</button><button id="camFollow" class="on">🎥 Следить</button><button id="gQuick">🎮 Играть</button><button id="breathBtn" class="on">💨 Дыхание</button><button id="feetBtn" class="on">🌫 Дым</button><button id="swordBtn" class="on">🗡 Меч</button><button id="uiHide">👁 Скрыть</button></div>
+    <button id="uiBack">👁 Интерфейс</button>
     <div id="pad">
       <div id="gTop"><button id="gExit">✕ Выход</button></div>
       <div id="ghint">палец по сцене — камера<br>клавиатура: WASD · пробел — действие 1 · K — действие 2</div>
@@ -556,6 +562,8 @@ $('feetBtn').classList.toggle('on',feetOn);
 $('feetBtn').onclick=()=>{feetOn=!feetOn;ls.set('morgothFeet',feetOn?'1':'0');$('feetBtn').classList.toggle('on',feetOn);if(!feetOn)feetFx.clear();toast(feetOn?'Дым у рук и ног':'Без дыма у рук и ног (заклинание остаётся)')};
 $('swordBtn').classList.toggle('on',swordOn);
 $('swordBtn').onclick=()=>{swordOn=!swordOn;ls.set('morgothSword',swordOn?'1':'0');$('swordBtn').classList.toggle('on',swordOn);if(swordObj)swordObj.visible=swordOn};
+function setClean(on){if(on&&game.on)return;document.body.classList.toggle('clean',on);gizmo.visible=!on&&!game.on;if(on){pathLine.visible=pathDots.visible=false}else updatePath()}
+$('uiHide').onclick=()=>setClean(true);$('uiBack').onclick=()=>setClean(false);
 $('camFollow').onclick=()=>{camFollow=!camFollow;$('camFollow').classList.toggle('on',camFollow);if(!camFollow){target.x=0;target.z=0}};
 bsel.addEventListener('change',()=>{sel=bsel.value;syncUI()});
 $('bReset').onclick=()=>{if(stanceMode){delete STX[sel];const m=mirrorName(sel);if(stSym&&m!==sel)delete STX[m];saveStance();return}delete work.pose[sel];applyPose(work.pose,work.drop);commitEdit();syncUI()};
@@ -666,6 +674,7 @@ const resolveA=id=>id==='cur'?clone(A):id==='none'?null:(findP(id)?clone(findP(i
 function mixPose(a,b,s){const pose={};for(const n of ANIM_B){const x=a.pose[n]||[0,0,0],y=b.pose[n]||[0,0,0];pose[n]=[x[0]+(y[0]-x[0])*s,x[1]+(y[1]-x[1])*s,x[2]+(y[2]-x[2])*s]}return{pose,drop:(a.drop||0)+((b.drop||0)-(a.drop||0))*s,smoke:(a.smoke||0)+((b.smoke||0)-(a.smoke||0))*s}}
 function setState(s){if(game.state===s)return;game.prev=game.out;game.fade=0;game.state=s;game.t=0}
 function startGame(){
+  setClean(false);
   if(stanceMode)setStanceMode(false);
   stopPlay();endDrag();
   game.anim={idle:resolveA($('gIdle').value),walk:resolveA($('gWalk').value),hit:resolveA($('gHit').value),hit2:resolveA($('gHit2').value)};
@@ -731,7 +740,7 @@ $('gStart').onclick=startGame;$('gQuick').onclick=startGame;$('gExit').onclick=e
 const ray=new THREE.Raycaster(),ndc=new THREE.Vector2();
 function exposed(b){while(b&&!LABEL[b.name])b=b.parent&&b.parent.isBone?b.parent:null;return b&&b.name}
 function pick(e){
-  if(!model||game.on)return;
+  if(!model||game.on||document.body.classList.contains('clean'))return;
   ray.setFromCamera(ndcOf(e,ndc),camera);
   const hit=ray.intersectObjects(meshes,false)[0];if(!hit||!hit.face)return;
   const o=hit.object;if(!o.isSkinnedMesh){return}
