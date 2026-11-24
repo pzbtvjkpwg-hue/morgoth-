@@ -105,10 +105,10 @@ body.game #app{grid-template-columns:minmax(0,1fr)!important;grid-template-rows:
 <div id="app">
   <div id="view">
     <div id="bonetag">Кость: <b id="bname">—</b></div>
-    <div id="hintv">тап по телу — выбрать часть<br>палец — вращать · два пальца — зум и сдвиг</div>
+    <div id="hintv">тап по телу — выбрать часть<br>палец — вращать · два пальца — зум и сдвиг<br>на компьютере: WASD — сдвиг камеры, колесо — зум</div>
     <div id="vtools">
-      <button id="mvMode">✥<small>Двигать</small></button><button id="camFollow" class="on">🎥<small>Следить</small></button>
-      <button id="camLock">🔒<small>Камера</small></button><button id="camReset">⟲<small>Вид</small></button>
+      <button id="camFollow" class="on">🎥<small>Следить</small></button><button id="camLock">🔒<small>Камера</small></button>
+      <button id="camReset">⟲<small>Вид</small></button>
       <button id="breathBtn" class="on">💨<small>Дыхание</small></button><button id="feetBtn" class="on">🌫<small>Дым</small></button>
       <button id="swordBtn" class="on">🗡<small>Меч</small></button><button id="uiHide">👁<small>Скрыть</small></button>
       <button id="gQuick" style="grid-column:span 2">🎮<small>Играть</small></button>
@@ -335,6 +335,10 @@ const ptrs=new Map();let tapStart=null,pinch0=0,dist0=dist,mid0=null;
 const CAMKEY='morgothCam',camOff=new THREE.Vector3();let camLocked=false;
 try{const c=JSON.parse(localStorage.getItem(CAMKEY)||'null');if(c&&c.locked){camLocked=true;yaw=c.yaw;pitch=c.pitch;dist=c.dist;target.fromArray(c.target)}}catch(e){}
 function saveCam(){try{localStorage.setItem(CAMKEY,JSON.stringify(camLocked?{locked:true,yaw,pitch,dist,target:target.toArray()}:{locked:false}))}catch(e){}}
+const edKeys={};
+addEventListener('keydown',e=>{if(game.on||/INPUT|TEXTAREA|SELECT/.test((e.target&&e.target.tagName)||''))return;if(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)){edKeys[e.code]=true;e.preventDefault()}});
+addEventListener('keyup',e=>{delete edKeys[e.code]});addEventListener('blur',()=>{for(const k in edKeys)delete edKeys[k]});
+function keyPan(dt){if(game.on||camLocked)return;const s=520*dt,x=((edKeys.KeyD||edKeys.ArrowRight)?1:0)-((edKeys.KeyA||edKeys.ArrowLeft)?1:0),y=((edKeys.KeyW||edKeys.ArrowUp)?1:0)-((edKeys.KeyS||edKeys.ArrowDown)?1:0);if(x||y)panBy(-x*s,y*s)}
 function panBy(dx,dy){const k=dist*0.0016,r=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw)),d=r.multiplyScalar(-dx*k);
   target.x+=d.x;target.z+=d.z;target.y=Math.max(0.1,Math.min(2.6,target.y+dy*k));camOff.x+=d.x;camOff.z+=d.z}
 let moveMode=false,camFollow=true,dragging=null;
@@ -577,7 +581,6 @@ $('prm').onclick=()=>setRot((work.rot||0)-5);$('prp').onclick=()=>setRot((work.r
 $('posReset').onclick=()=>{stopPlay();work.pos=[0,0];work.rot=0;applyPose(work.pose,work.drop);commitEdit();syncUI();toast('Персонаж в центре')};
 $('posPrev').onclick=()=>{const k=[...A.keys].reverse().find(k=>k.t<time-0.026);if(!k)return toast('Нет кадра раньше');stopPlay();work.pos=[...(k.pos||[0,0])];work.rot=k.rot||0;applyPose(work.pose,work.drop);commitEdit();syncUI()};
 const hintDef=$('hintv').innerHTML;
-$('mvMode').onclick=()=>{moveMode=!moveMode;$('mvMode').classList.toggle('on',moveMode);$('hintv').innerHTML=moveMode?'тащи пальцем — двигать персонажа по полу<br>два пальца — зум':hintDef;toast(moveMode?'Режим перемещения':'Режим камеры')};
 $('breathBtn').classList.toggle('on',breathOn);
 $('breathBtn').onclick=()=>{breathOn=!breathOn;ls.set('morgothBreath',breathOn?'1':'0');$('breathBtn').classList.toggle('on',breathOn);applyPose(work.pose,work.drop);toast(breathOn?'Дыхание включено':'Дыхание выключено')};
 $('feetBtn').classList.toggle('on',feetOn);
@@ -786,7 +789,7 @@ function init(){
   let last=performance.now();
   (function loop(now){
     requestAnimationFrame(loop);const dt=Math.min(0.05,(now-last)/1000);last=now;
-    stepBreath(dt);
+    stepBreath(dt);keyPan(dt);
     if(game.on)gameStep(dt);
     else if(stanceMode&&stPreview){stT=(stT+dt)%WALK.duration;const s=sample(stT,WALK);work={pose:s.pose,fingers:{},drop:s.drop,smoke:0,pos:[0,0],rot:0};applyPose(work.pose,work.drop)}
     else if(playing){time+=dt*(+$('speed').value);if(time>=A.duration){if(A.loop)time%=A.duration;else{time=A.duration;stopPlay()}}
