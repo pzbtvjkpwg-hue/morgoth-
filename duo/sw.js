@@ -14,5 +14,5 @@ self.addEventListener('fetch',e=>{
     return}
   const same=u.origin===location.origin,cdn=u.hostname==='cdn.jsdelivr.net';if(!same&&!cdn)return;
   e.respondWith(caches.open(CN).then(async c=>{const hit=await c.match(r.url);if(hit)return hit;
-    try{const res=await fetch(r);if(res.ok&&(cdn||/\.(glb|png|webmanifest)$/.test(u.pathname)))c.put(r.url,res.clone());return res}
+    try{const res=await fetch(r);if(res.ok&&(cdn||/\.(png|webmanifest)$/.test(u.pathname)))c.put(r.url,res.clone());return res}
     catch(err){const any=await c.match(r.url,{ignoreSearch:true});if(any)return any;throw err}}))});
