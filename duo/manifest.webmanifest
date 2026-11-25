@@ -1,0 +1,2 @@
+{"name":"Моргот и Рыцарь","short_name":"Арена","description":"Редактор анимаций и бой: Моргот и Серебряный рыцарь","start_url":"./","scope":"./","display":"standalone","orientation":"any","background_color":"#17181c","theme_color":"#17181c","lang":"ru",
+"icons":[{"src":"icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},{"src":"icon-512.png","sizes":"512x512","type":"image/png","purpose":"any"},{"src":"icon-512.png","sizes":"512x512","type":"image/png","purpose":"maskable"}]}
