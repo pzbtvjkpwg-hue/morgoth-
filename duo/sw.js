@@ -1,6 +1,7 @@
 // Offline support for «Моргот и Рыцарь»: the page itself network-first (new versions arrive when online),
 // models (versioned ?v=…) and the three.js library cache-first.
 const CN='duo-cache';
+const PL=new URL('preset-library/',self.registration.scope).pathname;
 self.addEventListener('install',()=>self.skipWaiting());
 self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));
 const noQ=u=>{const x=new URL(u);x.search='';x.hash='';return x.href};
@@ -13,6 +14,13 @@ self.addEventListener('fetch',e=>{
       return (await c.match(noQ(r.url)))||(await c.match(sc))||(await c.match(sc+'index.html'))||new Response('Нет сети, а игра ещё не сохранена для офлайна. Открой её один раз с интернетом.',{status:503,headers:{'Content-Type':'text/plain; charset=utf-8'}})})}));
     return}
   const same=u.origin===location.origin,cdn=u.hostname==='cdn.jsdelivr.net';if(!same&&!cdn)return;
+  if(same&&u.pathname.startsWith(PL)){
+    e.respondWith(caches.open(CN).then(async c=>{
+      try{const res=await fetch(r);if(res.ok)await c.put(r.url,res.clone());return res}
+      catch(error){return (await c.match(r.url))||Promise.reject(error)}
+    }));
+    return;
+  }
   e.respondWith(caches.open(CN).then(async c=>{const hit=await c.match(r.url);if(hit)return hit;
     try{const res=await fetch(r);if(res.ok&&(cdn||/\.(png|webmanifest)$/.test(u.pathname)))c.put(r.url,res.clone());return res}
     catch(err){const any=await c.match(r.url,{ignoreSearch:true});if(any)return any;throw err}}))});
