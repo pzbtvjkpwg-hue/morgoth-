@@ -1277,20 +1277,22 @@ const DP_BUILTIN=[
   {id:'dp_spell',name:'Заклинание',dmg:30,range:3.2,width:1.2,knock:2,stun:0,block:true,parry:false,builtin:true},
   {id:'dp_dash',name:'Рывок',dmg:25,range:1.5,width:1.4,knock:2,stun:0,stunOn:true,block:true,parry:true,builtin:true},
   {id:'dp_strong',name:'Сильный удар',dmg:25,range:1.5,width:1.4,knock:1.5,stun:0,stunOn:true,block:true,parry:false,builtin:true}];
-const DPKEY='duoDmgProfiles';let userDP=[];try{userDP=JSON.parse(ls.get(DPKEY)||'[]')||[]}catch(e){userDP=[]}
+const DPKEY=CHAR.id+'DmgProfiles';let userDP=[];try{userDP=JSON.parse(ls.get(DPKEY)??ls.get('duoDmgProfiles')??'[]')||[]}catch(e){userDP=[]}
 const allDP=()=>[...DP_BUILTIN,...userDP],findDP=id=>allDP().find(p=>p.id===id);
+const globalFindDP=findDP;
 const saveDP=()=>ls.set(DPKEY,JSON.stringify(userDP));
 const SLOT_DP={hit:'dp_spell',hit2:'dp_dash',hit3:'dp_sword',parry:'dp_sword'},SLOT_P={hit:'pHit',hit2:'pHit2',hit3:'pHit3'};
 // which profile a hit uses: the game-settings override for that skill slot, else the one bound to the animation, else the slot default
 // ctx: whose skill settings to read ({slots,custom}); the player's by default, the opponent's own when it uses them
-function getProf(anim,kind,ctx){const SL=ctx?ctx.slots:SLOTS,CU=ctx?ctx.custom:CUSTOM;if(isCustK(kind)){const c=CU.find(x=>x.id===kind);if(c&&c.prof&&c.prof!=='anim'&&findDP(c.prof))return findDP(c.prof)}const o=kind&&SLOT_P[kind]&&SL[SLOT_P[kind]];return findDP(o&&o!=='anim'?o:'')||findDP(anim&&anim.dmg)||findDP(SLOT_DP[kind])||DP_BUILTIN[0]}
+function getProf(anim,kind,ctx){const findDP=ctx&&ctx.profiles?(id=>[...DP_BUILTIN,...ctx.profiles].find(p=>p.id===id)):globalFindDP;const SL=ctx?ctx.slots:SLOTS,CU=ctx?ctx.custom:CUSTOM;if(isCustK(kind)){const c=CU.find(x=>x.id===kind);if(c&&c.prof&&c.prof!=='anim'&&findDP(c.prof))return findDP(c.prof)}const o=kind&&SLOT_P[kind]&&SL[SLOT_P[kind]];return findDP(o&&o!=='anim'?o:'')||findDP(anim&&anim.dmg)||findDP(SLOT_DP[kind])||DP_BUILTIN[0]}
 const CHKEY='duoChars',CH_DEF={hp:100,speed:100,swLen:100,swWid:100,stam:100,bArc:150,dArc:360,dDist:100};let swordScene=null;let CHSET={};try{CHSET=JSON.parse(ls.get(CHKEY)||'{}')||{}}catch(e){CHSET={}}
 const chs=id=>({...CH_DEF,...(CHSET[id]||{})}),hpMax=id=>chs(id).hp,spd=id=>chs(id).speed/100;
 let showArea=ls.get('duoShowArea')!=='0';
 // skills switched off (per character) and general game settings
 let SKOFF={};try{SKOFF=JSON.parse(ls.get(CHAR.id+'Off')||'{}')||{}}catch(e){SKOFF={}}
 const STAM_DEF={on:true,regen:30,delay:0.8,cost:{hit3:20,hit2:20,hit:20,custom:25,dodge:25,block:12,parry:5}};
-let GAMESET={ai:'normal',autoLock:true,aiSame:false,stam:STAM_DEF};try{const v=JSON.parse(ls.get('duoGame')||'null');if(v)GAMESET={...GAMESET,...v,stam:{...STAM_DEF,...(v.stam||{}),cost:{...STAM_DEF.cost,...((v.stam||{}).cost||{})}}}}catch(e){}
+const GAMEKEY=CHAR.id+'Game';
+let GAMESET={ai:'normal',autoLock:true,aiSame:false,stam:STAM_DEF};try{const v=JSON.parse(ls.get(GAMEKEY)??ls.get('duoGame')??'null');if(v)GAMESET={...GAMESET,...v,stam:{...STAM_DEF,...(v.stam||{}),cost:{...STAM_DEF.cost,...((v.stam||{}).cost||{})}}}}catch(e){}
 // skills that do NOT turn you toward the locked-on target (per character)
 let SKNOAIM={};try{SKNOAIM=JSON.parse(ls.get(CHAR.id+'NoAim')||'{}')||{}}catch(e){SKNOAIM={}}
 const isCustK=k=>typeof k==='string'&&/^c[0-4]$/.test(k);
@@ -1511,8 +1513,8 @@ const aiL=o=>aiLevel(o);
 function aiThink(o,dt){
   if(game.state==='dead'){if(o.state==='walk')setOS(o,'idle');return}
   const A_=o.anims,dx=game.x-o.x,dz=game.z-o.z,d=Math.hypot(dx,dz),L=aiL(o);o.rageOn=!!L.rage;
-  const busy=o.state!=='idle'&&o.state!=='walk',can=k=>!stOn()||o.st>=stCost(k);
-  const keep=k=>!stOn()||o.st-stCost(k)>=L.reserve*Math.max(stCost('parry'),stCost('dodge'));   // stamina left over for a defence
+  const busy=o.state!=='idle'&&o.state!=='walk',can=k=>!stOn(o)||o.st>=stCost(k,o);
+  const keep=k=>!stOn(o)||o.st-stCost(k,o)>=L.reserve*Math.max(stCost('parry',o),stCost('dodge',o));   // stamina left over for a defence
   const gs=game.state,pa=isAttack(gs)?game.anim[gs]:null;
   // 1) your swing: noticed after the reaction time, then a parry (its ⟲ window) or a dodge (⤳) timed onto your ⚔
   if(pa&&pa.hit!=null&&game.t<pa.hit){
@@ -1521,8 +1523,8 @@ function aiThink(o,dt){
       o.plan=Math.random()<L.def?(canP&&(!canD||Math.random()<(L.pp??0.7))?'parry':canD?'dodge':'none'):'none';o.jit=(Math.random()*2-1)*L.jit}
     o.planT+=dt;const rem=pa.hit-game.t;
     if(!busy&&o.planT>=L.react&&d<P.range+OTHER.r+1.1){
-      if(o.plan==='dodge'&&can('dodge')){const w=A_.dodge.dodge;if(rem<=(w[0]+w[1])/2+o.jit){faceTo(o,dx,dz);spendSt(o,stCost('dodge'));setOS(o,'dodge');o.plan='done';o.think='💨 уворачиваюсь';return}}
-      if(o.plan==='parry'&&can('parry')){const w=A_.parry.parry;if(rem<=(w[0]+w[1])/2+o.jit){faceTo(o,dx,dz);spendSt(o,stCost('parry'));setOS(o,'parry');o.plan='done';o.think='🛡 парирую';return}}}
+      if(o.plan==='dodge'&&can('dodge')){const w=A_.dodge.dodge;if(rem<=(w[0]+w[1])/2+o.jit){faceTo(o,dx,dz);spendSt(o,stCost('dodge',o));setOS(o,'dodge');o.plan='done';o.think='💨 уворачиваюсь';return}}
+      if(o.plan==='parry'&&can('parry')){const w=A_.parry.parry;if(rem<=(w[0]+w[1])/2+o.jit){faceTo(o,dx,dz);spendSt(o,stCost('parry',o));setOS(o,'parry');o.plan='done';o.think='🛡 парирую';return}}}
     if(!busy&&o.plan!=='none'&&o.plan!=='done'&&d<P.range+OTHER.r+1.1){let df=Math.atan2(dx,dz)-o.face;df=Math.atan2(Math.sin(df),Math.cos(df));o.face+=df*Math.min(1,dt*L.turn);setOS(o,'idle');o.think=o.plan==='parry'?'🛡 готовлю парирование':'💨 готовлю уворот';return}}
   if(busy)return;
   let df=Math.atan2(dx,dz)-o.face;df=Math.atan2(Math.sin(df),Math.cos(df));o.face+=df*Math.min(1,dt*L.turn);o.cd-=dt;
@@ -1539,10 +1541,10 @@ function aiThink(o,dt){
   const inReach=k=>reach(k)>0&&d<=reach(k);
   // your reach: how close it is safe to wait while its attack is not ready
   const yourReach=Math.max(1.2,...['hit3','hit2','hit'].map(k=>game.anim[k]&&game.anim[k].hit!=null?getProf(game.anim[k],k).range+OTHER.r:0));
-  if(d>3.4&&A_.hit2&&A_.hit2.keys.length&&(!L.w||L.w.hit2==null||L.w.hit2>0)&&(typeof mapLineClear!=='function'||mapLineClear(o.x,o.z,game.x,game.z))&&(o.cd<=0||punishing)&&Math.abs(df)<0.3&&can('hit2')&&keep('hit2')&&Math.random()<dt*L.dash*(punishing?4:1)){spendSt(o,stCost('hit2'));setOS(o,'hit2');o.think='⚡ рывок';o.cd=L.cd*0.8+Math.random()*0.4;return}
+  if(d>3.4&&A_.hit2&&A_.hit2.keys.length&&(!L.w||L.w.hit2==null||L.w.hit2>0)&&(typeof mapLineClear!=='function'||mapLineClear(o.x,o.z,game.x,game.z))&&(o.cd<=0||punishing)&&Math.abs(df)<0.3&&can('hit2')&&keep('hit2')&&Math.random()<dt*L.dash*(punishing?4:1)){spendSt(o,stCost('hit2',o));setOS(o,'hit2');o.think='⚡ рывок';o.cd=L.cd*0.8+Math.random()*0.4;return}
   const ready=(o.cd<=0&&!(L.counter&&o.cd>-2.5&&d>1.4))||punishing;
   // waiting: stay just outside your reach; the clever ones step back with a dodge when you come too close
-  if(!ready&&L.bd!==false&&d<yourReach-0.1&&Math.random()<dt*L.space*1.6&&A_.dodge&&A_.dodge.keys.length&&can('dodge')&&keep('dodge')&&!isAttack(gs)){faceTo(o,dx,dz);spendSt(o,stCost('dodge'));setOS(o,'dodge');o.think='↩ отступаю';return}
+  if(!ready&&L.bd!==false&&d<yourReach-0.1&&Math.random()<dt*L.space*1.6&&A_.dodge&&A_.dodge.keys.length&&can('dodge')&&keep('dodge')&&!isAttack(gs)){faceTo(o,dx,dz);spendSt(o,stCost('dodge',o));setOS(o,'dodge');o.think='↩ отступаю';return}
   const want=ready?(kinds.some(inReach)?0:1.2):(d>yourReach+0.35+(1-L.space)*0.6?1:0);
   if(want&&d>1.1){setOS(o,'walk');const W_=A_.walk&&A_.walk.keys.length?A_.walk:o.D.walk,sp=OTHER.stride/Math.max(0.3,W_.duration)*spd(OTHER.id)*L.walk;const a0=Math.atan2(dx,dz),a1=typeof mapSteer==='function'?mapSteer(o,a0,game.x,game.z):a0;let mv=o.face;o.think=punishing?'⚡ наказываю':ready?'🚶 иду бить':'🚶 подхожу';if(a1!==a0){o.face+=wrapA(a1-o.face)*Math.min(1,dt*6);mv=a1;o.think='🧭 обхожу препятствие'}o.x=clampA(o.x+Math.sin(mv)*sp*dt);o.z=clampA(o.z+Math.cos(mv)*sp*dt);return}
   setOS(o,'idle');o.think=punishing?'⚡ наказываю':ready?'🎯 целюсь':L.counter?'🛡 жду твою атаку':'⏳ жду';
@@ -1552,7 +1554,7 @@ function aiThink(o,dt){
     const opts=[['hit3',0.6],['hit',0.25],['hit2',0.2],...Object.keys(A_).filter(isCust).map(k=>[k,0.35])].map(([k,w])=>[k,L.w&&L.w[k]!=null?L.w[k]:w]).filter(([k,w])=>w>0&&inReach(k)&&can(k)&&(punishing||keep(k)))
       .map(([k,w])=>{const P=getProf(A_[k],k,o.ctx);return [k,w*(canPar(P)?1:adapt)*(punishing?(1+P.dmg/40):1)]});
     if(opts.length){let r=Math.random()*opts.reduce((s,x)=>s+x[1],0),pick_=opts[0][0];for(const [k,w] of opts){if((r-=w)<=0){pick_=k;break}}
-      spendSt(o,stCost(pick_));setOS(o,pick_);if(L.combo&&(o.chain||0)<L.combo&&Math.random()<0.75){o.chain=(o.chain||0)+1;o.cd=0.02}else{o.chain=0;o.cd=L.cd*(0.7+Math.random()*0.8)}o.think='⚔ атакую'+(o.chain?' — серия '+(o.chain+1):'');if(punishing)o.pun=false}}
+      spendSt(o,stCost(pick_,o));setOS(o,pick_);if(L.combo&&(o.chain||0)<L.combo&&Math.random()<0.75){o.chain=(o.chain||0)+1;o.cd=0.02}else{o.chain=0;o.cd=L.cd*(0.7+Math.random()*0.8)}o.think='⚔ атакую'+(o.chain?' — серия '+(o.chain+1):'');if(punishing)o.pun=false}}
 }
 const faceTo=(f,dx,dz)=>{f.face=Math.atan2(dx,dz)};
 function hitTest(ax,az,af,tx,tz,P,r){const dx=tx-ax,dz=tz-az,sf=Math.sin(af),cf=Math.cos(af),f=dx*sf+dz*cf,l=dx*cf-dz*sf;
@@ -1577,13 +1579,14 @@ function resolveHit(P,att,tgt,tgtFace,tgtDef,h,tH,onParried,onDamage){
   bleed(px,py,pz,ux,uz,P.dmg>=35);knock(tgt,ux,uz,P.knock??1.4);onDamage(P.dmg,stunOnOf(P)?1:0);return 'hit'}
 function dodgeFx(x,y,z){recFx('dodgeFx',arguments);sparks.burst(x,y,z,10,[.55,.6,.7],1.6,0.4)}
 // ---- stamina: actions cost it, it comes back after a short pause; a blocked hit costs it too and breaks the guard when empty
-const stOn=()=>!!(GAMESET.stam&&GAMESET.stam.on);
-function stCost(kind){const c=GAMESET.stam.cost;if(isCombo(kind)){const b=comboBase(kind);return b==='block'?0:stCost(b)}return isCust(kind)?c.custom:(c[kind]??0)}
-function spendSt(f,c,force){if(!stOn()||!f||f.st==null)return true;if(f.st<c&&!force)return false;f.st=Math.max(0,f.st-c);f.stT=0;return true}
-function regenSt(f,dt,slow){if(!stOn()||f.st==null)return;f.stT=(f.stT||0)+dt;if(f.stT>GAMESET.stam.delay)f.st=Math.min(f.stMax,f.st+GAMESET.stam.regen*dt*(slow?0.4:1))}
+function staminaOf(f){return f===other&&!GAMESET.aiSame?(f.stConfig||STAM_DEF):GAMESET.stam}
+const stOn=(f)=>!!staminaOf(f).on;
+function stCost(kind,f){const c=staminaOf(f).cost;if(isCombo(kind)){const b=comboBase(kind);return b==='block'?0:stCost(b,f)}return isCust(kind)?c.custom:(c[kind]??0)}
+function spendSt(f,c,force){if(!f||!stOn(f)||f.st==null)return true;if(f.st<c&&!force)return false;f.st=Math.max(0,f.st-c);f.stT=0;return true}
+function regenSt(f,dt,slow){if(!stOn(f)||f.st==null)return;const st=staminaOf(f);f.stT=(f.stT||0)+dt;if(f.stT>st.delay)f.st=Math.min(f.stMax,f.st+st.regen*dt*(slow?0.4:1))}
 // the opponent's skills: its own character's game settings (slots, own skills, switches), or mine when that is chosen
 const BIN_KEY={b_walk:'walk',b_dash:'dash',b_slash:'slash',b_heavy:'heavy',b_strong:'strong',b_block:'block',b_stun:'stun',b_hurt:'hurt',b_death:'death',b_dodge:'dodge'};
-function otherAnims(){if(GAMESET.aiSame)return{anims:game.anim,ctx:null};
+function otherAnims(){const v=lsJ(OTHER.id+'Game',lsJ('duoGame',{})).stam||{};other.stConfig={...STAM_DEF,...v,cost:{...STAM_DEF.cost,...(v.cost||{})}};if(GAMESET.aiSame)return{anims:game.anim,ctx:null};
   const rd=(k,def)=>{try{return JSON.parse(ls.get(OTHER.id+k)||'null')||def}catch(e){return def}};
   const S_=rd('Slots',{}),off=rd('Off',{}),cus=(rd('Custom',[])||[]).filter(c=>c&&/^c[0-4]$/.test(c.id)),UP=rd('Presets',[]),OD=other.D;
   const res0=id=>{if(!id||id==='none'||id==='cur')return null;if(id.startsWith(XPRE)){const r=id.slice(XPRE.length),q=BUILTIN.find(x=>x.id===r)||userP.find(x=>x.id===r);return q?clone(q.data):null}if(BIN_KEY[id])return OD[BIN_KEY[id]]?clone(OD[BIN_KEY[id]]):null;const p=UP.find(x=>x.id===id);return p?clone(p.data):null};
@@ -1591,7 +1594,7 @@ function otherAnims(){if(GAMESET.aiSame)return{anims:game.anim,ctx:null};
   const sl=(k,def)=>res(S_[k]||def);
   const a={walk:sl('gWalk','b_walk'),hit:null,parry:null,hit2:off.hit2?null:sl('gHit2','b_dash'),hit3:off.hit3?null:sl('gHit3','b_slash'),block:null,parry:off.block?null:sl('gBlock','b_block'),dodge:off.dodge?null:sl('gDodge','b_dodge')};
   for(const c of cus)if(!off[c.id]){const x=res(c.anim);if(x){x.name=c.name;a[c.id]=x}}
-  return{anims:a,ctx:{slots:S_,custom:cus}}}
+  return{anims:a,ctx:{slots:S_,custom:cus,profiles:rd('DmgProfiles',lsJ('duoDmgProfiles',[]))}}}
 // player (or editor playback) hits the second character
 function strikeOther(att,P,fromGame){const o=other;if(!o.on||!o.g||o.state==='dead')return null;
   const h=hitTest(att.x,att.z,att.face,o.x,o.z,P,OTHER.r);if(!h){flashArea(att.x,att.z,att.face,P,false);return 'miss'}
@@ -2091,7 +2094,7 @@ function setupPartner(){if(!$('partner'))return;
   $('ptHp').onchange=()=>{PART.hp=$('ptHp').checked;savePart()};
   const hpIn=(id,who)=>$(id).addEventListener('change',()=>{const v=Math.round(+$(id).value);if(!isFinite(v)||v<10)return;CHSET[who]={...(CHSET[who]||{}),hp:clampN(v,10,9999)};ls.set(CHKEY,JSON.stringify(CHSET));if(who===CHAR.id)edHp=hpMax(CHAR.id);else if(other.on)other.hp=hpMax(OTHER.id);toast('❤ '+(who===CHAR.id?CHAR.name:OTHER.name)+': '+hpMax(who))});
   hpIn('ptHpMe',CHAR.id);hpIn('ptHpHim',OTHER.id);
-  for(const [id,k] of [['ptImmMe','immMe'],['ptImmD','immD']])$(id).onchange=()=>{GAMESET[k]=$(id).checked;ls.set('duoGame',JSON.stringify(GAMESET));toast($(id).checked?'♾ Бессмертие включено':'Бессмертие выключено')};
+  for(const [id,k] of [['ptImmMe','immMe'],['ptImmD','immD']])$(id).onchange=()=>{GAMESET[k]=$(id).checked;ls.set(GAMEKEY,JSON.stringify(GAMESET));toast($(id).checked?'♾ Бессмертие включено':'Бессмертие выключено')};
   $('ptHpReset').onclick=()=>{edHp=hpMax(CHAR.id);if(other.on){other.hp=hpMax(OTHER.id);if(other.state==='dead')resetOther('dummy',other.x,other.z,other.face)}toast('❤ Здоровье восстановлено')};
   $('lkSave').onclick=saveLink;$('lkList').addEventListener('click',lkEvent);$('lkList').addEventListener('change',lkEvent);
   $('ptAnim').onchange=()=>{PART.anim=$('ptAnim').value;savePart();partInfo();sceneLive=false;if(!PART.on){PART.on=true;$('ptOn').checked=true;savePart()}};
@@ -2245,9 +2248,9 @@ function toggleAggr(){if(!game.on||game.mode!=='test')return;if(other.aggr)retur
 const CAM_DEF={base:{mode:'free',dist:3.6,pitch:9,h:50,side:0,smooth:7,fov:40},lock:{dist:3.3,pitch:11,h:55,side:0,focus:0.35,far:0.3,turn:3.5,yaw:0,fov:40}};
 const CAM_F={base:[['dist','Дистанция',1.2,12,0.1,' м'],['pitch','Наклон',-10,70,1,'°'],['h','Высота взгляда',20,130,1,' % роста'],['side','Сдвиг вбок',-2,2,0.05,' м'],['smooth','Плавность слежения',1,30,0.5,''],['fov','Угол обзора',20,100,1,'°']],
   lock:[['dist','Дистанция',1.2,12,0.1,' м'],['pitch','Наклон',-10,70,1,'°'],['h','Высота взгляда',20,130,1,' % роста'],['side','Сдвиг вбок (плечо)',-2,2,0.05,' м'],['focus','Точка между вами',0,0.9,0.01,''],['far','Отдаление от дистанции до врага',0,1,0.01,''],['turn','Скорость поворота',0.5,12,0.1,''],['yaw','Угол сбоку',-60,60,1,'°'],['fov','Угол обзора',20,100,1,'°']]};
-let CAM={base:{...CAM_DEF.base,...lsJ('duoCamBase',{})},lock:{...CAM_DEF.lock,...lsJ('duoCamLock',{})}};
-let CAMP=lsJ('duoCamPresets',[]),camKind='base',camSelId={base:ls.get('duoCamSelBase')||'def',lock:ls.get('duoCamSelLock')||'def'};
-const saveGCam=()=>{ls.set('duoCamBase',JSON.stringify(CAM.base));ls.set('duoCamLock',JSON.stringify(CAM.lock));ls.set('duoCamPresets',JSON.stringify(CAMP));ls.set('duoCamSelBase',camSelId.base);ls.set('duoCamSelLock',camSelId.lock)};
+let CAM={base:{...CAM_DEF.base,...lsJ(CHAR.id+'GameCamBase',lsJ('duoCamBase',{}))},lock:{...CAM_DEF.lock,...lsJ(CHAR.id+'GameCamLock',lsJ('duoCamLock',{}))}};
+let CAMP=lsJ(CHAR.id+'GameCamPresets',lsJ('duoCamPresets',[])),camKind='base',camSelId={base:(ls.get(CHAR.id+'GameCamSelBase')??ls.get('duoCamSelBase'))||'def',lock:(ls.get(CHAR.id+'GameCamSelLock')??ls.get('duoCamSelLock'))||'def'};
+const saveGCam=()=>{ls.set(CHAR.id+'GameCamBase',JSON.stringify(CAM.base));ls.set(CHAR.id+'GameCamLock',JSON.stringify(CAM.lock));ls.set(CHAR.id+'GameCamPresets',JSON.stringify(CAMP));ls.set(CHAR.id+'GameCamSelBase',camSelId.base);ls.set(CHAR.id+'GameCamSelLock',camSelId.lock)};
 // the editor keeps its own camera: entering the game stores it, leaving the game puts it back exactly — the game always starts from its own (preset) camera
 let edCam=null;
 function camGameStart(){if(!edCam)edCam={yaw,pitch,dist,t:target.clone(),o:camOff.clone()};const B=CAM.base;dist=B.dist;pitch=B.pitch*D2R;yaw=game.face+Math.PI;camOff.set(0,0,0);
@@ -2364,7 +2367,7 @@ const FX_SKEYS=['hsp','hspN','spk','spkCol','spkBri','spkN','spkSp','spkSize','s
 const FXS_UI=[['fx_spkN','spkN','%'],['fx_spkSp','spkSp','%'],['fx_spkSize','spkSize','%'],['fx_spkLife','spkLife','%'],['fx_spkBri','spkBri','%'],['fx_spkFlash','spkFlash','%']];
 const FX_BKEYS=['bcol','bvar','bpatch','bsize','bdots','bdry','bgloss','bdens'];
 const FXS=()=>({...FX_DEF,...(GAMESET.fx||{})});
-const saveFx=v=>{GAMESET.fx={...FXS(),...v};ls.set('duoGame',JSON.stringify(GAMESET))};
+const saveFx=v=>{GAMESET.fx={...FXS(),...v};ls.set(GAMEKEY,JSON.stringify(GAMESET))};
 // blood that sticks to the surface: a noise pattern in the model's own (rest-pose) space, so stains ride along with the armour; its coverage is a uniform
 function makeBloodNoise(){const N=64,PER=12,d=new Uint8Array(N*N*N*2);let sd=1234567;const rnd=()=>{sd|=0;sd=sd+0x6D2B79F5|0;let t=Math.imul(sd^sd>>>15,1|sd);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296};
   const lat=c=>{const a=new Float32Array(c*c*c);for(let i=0;i<a.length;i++)a[i]=rnd();return a},L=[[lat(12),12],[lat(24),24],[lat(48),48],[lat(12),12]];
@@ -2549,7 +2552,7 @@ function uiApply(){const h=GAMESET.uiHide||{};let st=$('uiHideCss');if(!st){st=d
   st.textContent=UI_BTNS.filter(([id])=>h[id]).map(([id])=>'#'+id).join(',')+(Object.values(h).some(Boolean)?'{display:none!important}':'')}
 function setupUiT(){const box=$('uiToggles');uiApply();if(!box)return;const h=GAMESET.uiHide||{};
   box.innerHTML=UI_BTNS.map(([id,n])=>`<label class="chk"><input type="checkbox" data-ui="${id}" ${h[id]?'':'checked'}> ${n}</label>`).join('');
-  box.onchange=e=>{const id=e.target.dataset&&e.target.dataset.ui;if(!id)return;GAMESET.uiHide={...(GAMESET.uiHide||{}),[id]:e.target.checked?0:1};ls.set('duoGame',JSON.stringify(GAMESET));uiApply()}}
+  box.onchange=e=>{const id=e.target.dataset&&e.target.dataset.ui;if(!id)return;GAMESET.uiHide={...(GAMESET.uiHide||{}),[id]:e.target.checked?0:1};ls.set(GAMEKEY,JSON.stringify(GAMESET));uiApply()}}
 
 // ================= 📱 app feel: shader warm-up, screen stays awake, no page rubber-band, pause when the app is hidden, confirm before leaving a fight =================
 // 1) every effect's GPU program is prepared ahead (hidden objects made visible just for the compile call — it gathers them synchronously, nothing is drawn), so the first hit / spark / blood doesn't stutter
@@ -2699,9 +2702,9 @@ function setupAI(){if(!$('aiEd'))return;const W=$('aiEd');
   $('aiSave').onclick=()=>{aiSave();toast('💾 ИИ «'+aiE.name+'» сохранён')};
   $('aiDel').onclick=()=>{const b=$('aiDel');if(!aiSelId)return;if(!b.dataset.arm){b.dataset.arm=1;b.textContent='Точно?';setTimeout(()=>{b.dataset.arm='';b.textContent='🗑'},2500);return}
     const U=aiUser().filter(p=>p.id!==aiSelId);ls.set(AI_KEY,JSON.stringify(U));const B=aiBinds();for(const k in B)if(B[k]==='c:'+aiSelId)delete B[k];ls.set(AI_BIND,JSON.stringify(B));
-    if(GAMESET.ai==='c:'+aiSelId){GAMESET.ai='normal';ls.set('duoGame',JSON.stringify(GAMESET))}aiE=null;aiSelId='';aiDraw();aiFillSel();toast('Удалено')};
+    if(GAMESET.ai==='c:'+aiSelId){GAMESET.ai='normal';ls.set(GAMEKEY,JSON.stringify(GAMESET))}aiE=null;aiSelId='';aiDraw();aiFillSel();toast('Удалено')};
   // ▶ check: save, make it the chosen level and set an aggressive dummy on you in the test
-  $('aiTry').onclick=()=>{const id=aiSave();GAMESET.ai='c:'+id;ls.set('duoGame',JSON.stringify(GAMESET));aiFillSel();
+  $('aiTry').onclick=()=>{const id=aiSave();GAMESET.ai='c:'+id;ls.set(GAMEKEY,JSON.stringify(GAMESET));aiFillSel();
     if(game.on&&game.mode==='test'){if(!other.aggr)toggleAggr();else toast('🧠 Теперь болванчик играет как «'+aiE.name+'»')}
     else if(!game.on){try{const mp=$('modePick');if(mp)mp.style.display='none'}catch(e){}startGame('test');setTimeout(()=>{if(game.on&&game.mode==='test'&&!other.aggr)toggleAggr()},700)}
     else toast('🧠 «'+aiE.name+'» выбран — в бою он сработает со следующего боя')};
@@ -2720,7 +2723,7 @@ $('resAgain').onclick=()=>{$('result').style.display='none';startGame('fight')};
 $('resExit').onclick=()=>{$('result').style.display='none';$('resT').textContent='';if(game.on)exitGame();else{try{refresh()}catch(e){}}};
 $('dummyBtn').onclick=toggleDummy;$('gDummy').onclick=toggleDummy;$('gLock').onclick=toggleLock;
 $('skBtn').onclick=openSettings;$('mSkills').onclick=()=>{$('modePick').style.display='none';openSettings()};
-$('skDone').onclick=()=>{try{document.activeElement&&document.activeElement.blur&&document.activeElement.blur()}catch(e){}setTimeout(()=>{try{dispatchEvent(new Event('resize'))}catch(e){}},350);saveChars();saveSlots();for(const k of ['hit','hit2','hit3','block','parry','dodge']){if($('on_'+k))SKOFF[k]=!$('on_'+k).checked;if($('aim_'+k))SKNOAIM[k]=!$('aim_'+k).checked}GAMESET.aiSame=$('aiSame').checked;GAMESET.immD=$('immD').checked;GAMESET.immMe=$('immMe').checked;{const st=GAMESET.stam,n=(id,lo,hi,df)=>{const el=$(id);if(!el)return df;const v=+el.value;return isFinite(v)&&el.value!==''?Math.max(lo,Math.min(hi,v)):df};st.on=$('stOn').checked;st.regen=n('stRegen',0,9999,30);st.delay=n('stDelay',0,60,0.8);for(const k in st.cost)st.cost[k]=n('stc_'+k,0,9999,st.cost[k])}ls.set(CHAR.id+'Off',JSON.stringify(SKOFF));ls.set(CHAR.id+'NoAim',JSON.stringify(SKNOAIM));GAMESET.ai=$('aiSel').value;GAMESET.autoLock=$('autoLock').checked;ls.set('duoGame',JSON.stringify(GAMESET));showArea=$('areaChk').checked;ls.set('duoShowArea',showArea?'1':'0');try{syncViewBtns()}catch(e){}$('skills').style.display='none';toast('Настройки сохранены')};
+$('skDone').onclick=()=>{try{document.activeElement&&document.activeElement.blur&&document.activeElement.blur()}catch(e){}setTimeout(()=>{try{dispatchEvent(new Event('resize'))}catch(e){}},350);saveChars();saveSlots();for(const k of ['hit','hit2','hit3','block','parry','dodge']){if($('on_'+k))SKOFF[k]=!$('on_'+k).checked;if($('aim_'+k))SKNOAIM[k]=!$('aim_'+k).checked}GAMESET.aiSame=$('aiSame').checked;GAMESET.immD=$('immD').checked;GAMESET.immMe=$('immMe').checked;{const st=GAMESET.stam,n=(id,lo,hi,df)=>{const el=$(id);if(!el)return df;const v=+el.value;return isFinite(v)&&el.value!==''?Math.max(lo,Math.min(hi,v)):df};st.on=$('stOn').checked;st.regen=n('stRegen',0,9999,30);st.delay=n('stDelay',0,60,0.8);for(const k in st.cost)st.cost[k]=n('stc_'+k,0,9999,st.cost[k])}ls.set(CHAR.id+'Off',JSON.stringify(SKOFF));ls.set(CHAR.id+'NoAim',JSON.stringify(SKNOAIM));GAMESET.ai=$('aiSel').value;GAMESET.autoLock=$('autoLock').checked;ls.set(GAMEKEY,JSON.stringify(GAMESET));showArea=$('areaChk').checked;ls.set('duoShowArea',showArea?'1':'0');try{syncViewBtns()}catch(e){}$('skills').style.display='none';toast('Настройки сохранены')};
 $('dmgEdBtn').onclick=()=>openDmgEd();$('evProfEd').onclick=()=>openDmgEd(getProf(A,null).id);
 $('evProf').addEventListener('change',e=>{const v=e.target.value;if(v==='__new')return bindNewProfile();if(v)A.dmg=v;else delete A.dmg;save();syncEv();toast('Профиль урона: '+getProf(A,null).name)});
 $('dpSel').addEventListener('change',e=>{dpSel=e.target.value;loadDp();drawDp()});
@@ -2814,11 +2817,12 @@ function init(){
   (function loop(now){
     requestAnimationFrame(loop);
     // frame cap (30 / 60), adaptive resolution and the FPS counter
-    if(GFX.fps>0&&now-gfxPrev<1000/GFX.fps-2)return;const fdt=now-gfxPrev;gfxPrev=now;fpsN++;fpsT+=fdt;frameAcc+=fdt;frameN++;
+    if(GFX.fps>0&&now-gfxPrev<1000/GFX.fps-2)return;const fdt=now-gfxPrev;gfxPrev=now;fpsN++;fpsT+=fdt;if(GFX.adapt){frameAcc+=fdt;frameN++;}
     if(fpsT>=500){const f=Math.round(fpsN*1000/fpsT);if(GFX.showFps){const e=document.getElementById('fpsBox');if(e){e.style.display='block';e.textContent=f+' FPS · '+DPR.toFixed(2)+'×'}}fpsN=0;fpsT=0}
     if(GFX.adapt&&(adaptT+=fdt)>1500){const avg=frameAcc/frameN,goal=1000/(GFX.fps||60);frameAcc=0;frameN=0;adaptT=0;const hi=Math.min(devicePixelRatio,GFX.dpr)*GFX.scale;
       if(avg>goal*1.18&&DPR>0.75){DPR=Math.max(0.75,DPR-0.15);gfxRes()}else if(avg<goal*1.04&&DPR<hi){DPR=Math.min(hi,DPR+0.1);gfxRes()}}
     const dt=Math.min(0.05,(now-last)/1000);last=now;
+    if(document.hidden||document.getElementById('rigEd').style.display==='flex'||document.getElementById('mapEd').style.display==='flex')return;
     stepBreath(dt);keyPan(dt);
     if(RPL)replayStep(dt);else if(game.on&&game.paused){}else if((stepOther(dt),game.on))gameStep(dt);
     else if(stanceMode&&stPreview){stT=(stT+dt)%WALK.duration;const s=sample(stT,WALK);work={pose:s.pose,fingers:{},drop:s.drop,smoke:0,pos:[0,0],rot:0};applyPose(work.pose,work.drop)}
@@ -2914,7 +2918,7 @@ document.getElementById('pickM').onclick=()=>PICK('morgoth');
 }catch(e){}})();
 // ---- all presets and settings to a file and back (between Safari, the installed app, the phone and the Mac) ----
 // lists of presets (anything stored as an array of objects with ids) are MERGED on load: yours stay, the file's are added, same ids are updated
-(function(){try{const PFX=/^(morgoth|knight|duo)/,$i=id=>document.getElementById(id);
+(function(){try{const PFX=/^(morgoth|knight|duo|c_)/,$i=id=>document.getElementById(id);
   async function save(){const data={};for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(PFX.test(k))data[k]=localStorage.getItem(k)}
     const n=Object.keys(data).length,d=new Date(),name='arena-presety-'+d.toISOString().slice(0,16).replace(/[:T]/g,'-')+'.json',blob=new Blob([JSON.stringify({kind:'duo-settings',when:d.toISOString(),data})],{type:'application/json'});
     const touch=/iPhone|iPad|iPod|Android/.test(navigator.userAgent)||(/Macintosh/.test(navigator.userAgent)&&navigator.maxTouchPoints>1);
