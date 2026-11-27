@@ -1,4 +1,4 @@
-import {extract,readArchive} from './archive.js';
+import {crc32,extract,readArchive} from './archive.js';
 import {cacheName,cacheURL,list,load,modelURL,put,readClip,remove,saveFile,storeClip} from './store.js';
 
 const source='https://www.rokoko.com/resources/download-263-rokoko-motion-capture-assets';
@@ -9,9 +9,12 @@ const names={morgoth:'Моргот',knight:'Серебряный рыцарь'};
 const modelSizes={"morgoth_lite.glb":2607272,"sword_knight_lite.glb":2122128,"sword_knight.glb":2918380,"morgoth.glb":5369188,"sword_morgoth.glb":1371472,"knight_lite.glb":2840164,"sword_morgoth_lite.glb":748820,"knight.glb":5530212};
 const kClip=(entry,variant,target)=>JSON.stringify(['r1',entry.id,variant.crc,target.key]);
 let catalog,archive,context,layout,cached=new Set(),prior=new Set(),localModels=new Set(),running=false;
-let dialog,results,status,search,category,folder,type,importInput,importButton,pack,packButton,setupPromise;
+let dialog,results,status,search,category,folder,type,pack,packButton,selectedButton,setupPromise;
+const filesByPath=new Map(),localEntries=new Map(),selected=new Set();
+let catalogFiles;
+const savedLocalEntries=new Map();
 let inventory=[],refresh=0,packRunning=false,stopPack=false;
-let progress,preview,previewViewport,previewRequest;
+let progress,preview,previewViewport,previewRequest,connectedOnly,connectedLabel;
 
 const element=(tag,text,attr={})=>{
   const e=document.createElement(tag);Object.assign(e,attr);if(text)e.textContent=text;return e;
@@ -40,19 +43,32 @@ function build(){
   type=element('select','',{ariaLabel:'Тип ресурса'});
   type.onchange=()=>{setCategories();render()};
   category=element('select','',{ariaLabel:'Категория',onchange:render});
+  connectedOnly=element('input','',{type:'checkbox',onchange:render});
+  connectedLabel=element('label','',{hidden:true});
+  connectedLabel.append(connectedOnly,document.createTextNode('Только подключённые'));
   folder=element('select','',{ariaLabel:'Папка',onchange:render});
-  importInput=element('input','',{type:'file',accept:'.zip,application/zip',hidden:true});
+  const importInput=element('input','',{type:'file',accept:'.zip,application/zip',hidden:true});
   importInput.onchange=()=>run(async()=>{
     const file=importInput.files[0];importInput.value='';
     if(!file)return;
     const next=await readArchive(file);
-    const found=catalog.entries.filter(e=>!!variantFor(e,next)).length;
+    const found=catalog.entries.filter(e=>e.variants.some(v=>next.entries.get(v.path)?.crc===v.crc)).length;
     if(!found)throw Error('Архив не совпадает с каталогом Rokoko');
-    archive=next;type.value='Rokoko Animations';setCategories();render();
+    archive=next;showRokoko();
     say('Архив подключён · '+found+' записей · '+mb(file.size));
   });
-  importButton=button('Подключить ZIP Rokoko',()=>importInput.click());
-  packButton=button('Сохранить пак офлайн',savePack);
+  const importButton=button('Подключить ZIP Rokoko',()=>importInput.click());
+  const files=element('input','',{type:'file',multiple:true,hidden:true,ariaLabel:'Файлы FBX'});
+  const directory=element('input','',{type:'file',multiple:true,hidden:true,ariaLabel:'Папка с FBX'});
+  directory.setAttribute('webkitdirectory','');
+  for(const input of [files,directory])input.onchange=()=>run(()=>{
+    const picked=[...input.files];input.value='';
+    if(picked.length)connectFiles(picked);
+  });
+  const fileButton=button('Выбрать FBX',()=>files.click());
+  const folderButton=button('Выбрать папку с FBX',()=>directory.webkitdirectory?directory.click():say('Этот браузер открывает только отдельные файлы. Нажми «Выбрать FBX».'));
+  selectedButton=button('Добавить выбранные',()=>savePack(true));
+  packButton=button('Сохранить пак офлайн',()=>savePack(false));
   const addFolder=button('Новая папка',async()=>{
     const name=prompt('Название папки')?.trim().slice(0,60);
     if(!name||layout.folders.includes(name))return;
@@ -62,15 +78,15 @@ function build(){
   const vendor=element('a','Скачать ZIP у Rokoko',{href:source,target:'_blank',rel:'noopener noreferrer'});
   vendor.style.color='#ffb77c';
   const controls=element('div','',{className:'row'});
-  controls.append(search,type,category,folder,addFolder);
+  controls.append(search,type,category,folder,connectedLabel,addFolder);
   pack=element('div','',{className:'row'});
   progress=element('progress','',{hidden:true,ariaLabel:'Загрузка'});
-  pack.append(vendor,importButton,packButton,progress);
+  pack.append(vendor,importButton,folderButton,fileButton,selectedButton,packButton,progress);
   results=element('section','',{ariaLabel:'Ресурсы'});
   preview=element('section','',{hidden:true,ariaLabel:'Предпросмотр 3D'});
   previewViewport=element('div');previewViewport.style.height='min(36dvh,360px)';
   preview.append(element('button','Закрыть предпросмотр',{type:'button',onclick:closePreview}),previewViewport);
-  dialog.append(close,title,status,controls,pack,importInput,preview,results);
+  dialog.append(close,title,status,controls,pack,importInput,files,directory,preview,results);
   document.body.append(dialog);
 }
 function closePreview(){
@@ -92,9 +108,33 @@ async function previewModel(row){
   }
 }
 function resetFolders(){setOptions(folder,layout.folders,'Все папки')}
+const allEntries=()=>[...catalog.entries,...localEntries.values()];
+function showRokoko(){
+  type.value='Rokoko Animations';
+  search.value='';folder.value='';category.value='';connectedOnly.checked=true;
+}
+function connectFiles(picked){
+  const fbx=picked.filter(file=>/\.fbx$/i.test(file.name));
+  if(!fbx.length)throw Error('В выбранных файлах нет FBX');
+  for(const file of fbx){
+    const path=file.webkitRelativePath||file.name;
+    const matching=catalogFiles.get(file.name.toLowerCase())?.filter(v=>v.size===file.size)||[];
+    const known=matching.find(v=>path.endsWith('/'+v.path)||path===v.path)
+      || (matching.every(v=>v.crc===matching[0]?.crc)?matching[0]:null);
+    if(known){filesByPath.set(known.path,file);continue}
+    const id='local:'+JSON.stringify([path,file.size,file.lastModified]);
+    if(!localEntries.has(id))localEntries.set(id,{
+      id,name:file.name.replace(/\.fbx$/i,''),category:'Мои FBX',local:true,
+      variants:[{path:id,rig:'FBX',size:file.size,crc:id}],
+    });
+    filesByPath.set(id,file);
+  }
+  showRokoko();
+  say('Подключено FBX: '+fbx.length+' · отметь нужные движения галочками');
+}
 function setCategories(){
-  setOptions(category,type.value==='Rokoko Animations'?[...new Set((catalog?.entries||[]).map(e=>e.category))]:[],'Все категории');
-  category.hidden=type.value!=='Rokoko Animations';
+  setOptions(category,type.value==='Rokoko Animations'?[...new Set((catalog?allEntries():[]).map(e=>e.category))]:[],'Все категории');
+  category.hidden=connectedLabel.hidden=type.value!=='Rokoko Animations';
 }
 async function setup(){
   const response=fetch(catalogURL).then(async response=>{
@@ -107,8 +147,18 @@ async function setup(){
     if(!cached)throw e;
     return cached;
   });
-  const [fresh,old]=await Promise.all([response,load('layout','state')]);
+  const [fresh,old,local]=await Promise.all([response,load('layout','state'),load('layout','local-fbx')]);
   catalog=await fresh.json();
+  catalogFiles=new Map();
+  for(const entry of catalog.entries)for(const variant of entry.variants){
+    const name=variant.path.split('/').pop().toLowerCase();
+    if(!catalogFiles.has(name))catalogFiles.set(name,[]);
+    catalogFiles.get(name).push(variant);
+  }
+  for(const entry of local||[]){
+    localEntries.set(entry.id,entry);
+    savedLocalEntries.set(entry.id,entry);
+  }
   layout=old||{folders:[],assignments:{}};
   resetFolders();setCategories();
 }
@@ -206,11 +256,11 @@ function makeInventory(characters,weapons){
   for(const [id,label] of [...Object.entries(names),...characters.map(c=>[c.id,c.name])])out.push(...presetRows(id,label));
   out.push({id:'pack:rokoko',name:'Rokoko Animations',kind:'Паки анимаций',description:'ZIP '+mb(catalog.bytes),
     state:()=>packState(),apply:()=>{type.value='Rokoko Animations';setCategories();render()}});
-  for(const entry of catalog.entries){
+  for(const entry of allEntries()){
     const v=entry.variants[0];
     out.push({id:'rokoko:'+entry.id,name:entry.name,kind:'Rokoko Animations',category:entry.category,
       description:entry.category+' · '+v.rig+' · '+mb(v.size),
-      state:()=>clipState(entry),download:context?.target&&!entry.face?()=>saveClip(entry):null,
+      entry,state:()=>clipState(entry),download:context?.target&&!entry.face?()=>saveClip(entry):null,
       apply:context?.target&&!entry.face?async()=>context.openClip(await saveClip(entry)):null,
       clear:context?.target&&clipState(entry)==='Доступен офлайн'?()=>clearClip(entry):null});
   }
@@ -229,7 +279,21 @@ async function downloadURLs(urls){
   }
   say('Доступен офлайн');
 }
-function variantFor(entry,zip=archive){return entry.variants.find(v=>zip?.entries.get(v.path)?.crc===v.crc)}
+function connected(variant){
+  return filesByPath.has(variant.path)||archive?.entries.get(variant.path)?.crc===variant.crc;
+}
+function variantFor(entry){return entry.variants.find(connected)}
+async function inputBytes(variant){
+  const file=filesByPath.get(variant.path);
+  if(!file)return extract(archive,variant);
+  if(file.size>96*1024*1024)throw Error('FBX слишком велик');
+  const bytes=await file.arrayBuffer();
+  if(typeof variant.crc==='number'&&crc32(new Uint8Array(bytes))!==variant.crc){
+    if(archive?.entries.get(variant.path)?.crc===variant.crc)return extract(archive,variant);
+    throw Error('FBX отличается от оригинала Rokoko: '+file.name);
+  }
+  return bytes;
+}
 function clipState(entry){
   if(entry.face)return 'Лицевая дорожка · нужен лицевой риг';
   if(!context?.target)return 'Выбери персонажа в редакторе';
@@ -249,39 +313,43 @@ async function saveClip(entry){
     const key=kClip(entry,v,target);
     if(cached.has(key)){
       const saved=await readClip(key);
-      if(saved)return saved;
+      if(saved){selected.delete(entry.id);return saved;}
       cached.delete(key);
     }
   }
-  if(!archive)throw Error('Сначала подключи скачанный у Rokoko ZIP');
-  if(!packRunning)say('Скачивается из ZIP · '+entry.name);
+  if(!packRunning)say('Импортируется · '+entry.name);
   let failure;
-  for(const v of entry.variants.filter(item=>variantFor({variants:[item]}))){
+  for(const v of entry.variants.filter(connected)){
     try{
       const {retarget}=await import('./retarget.js');
-      const anim=await retarget(await extract(archive,v),entry.name,target);
+      const anim=await retarget(await inputBytes(v),entry.name,target);
       const key=kClip(entry,v,target);
-      await storeClip(key,anim);cached.add(key);
+      if(entry.local&&!savedLocalEntries.has(entry.id)){
+        const next=new Map(savedLocalEntries).set(entry.id,entry);
+        await put('layout','local-fbx',[...next.values()]);
+        savedLocalEntries.set(entry.id,entry);
+      }
+      await storeClip(key,anim);cached.add(key);selected.delete(entry.id);
       if(!packRunning)say('Доступен офлайн · '+entry.name);
       return anim;
     }catch(e){failure=e}
   }
-  throw failure||Error('Нет подходящего файла в ZIP');
+  throw failure||Error('Подключи ZIP, папку или файл FBX для этого движения');
 }
 async function clearClip(entry){
   if(!confirm('Удалить офлайн-копию «'+entry.name+'»?'))return;
   for(const variant of entry.variants)await remove('clips',kClip(entry,variant,context.target));
   say('Офлайн-копия удалена');
 }
-async function savePack(){
+async function savePack(onlySelected){
   if(!context?.target)throw Error('Открой редактор персонажа');
-  if(!archive)throw Error('Сначала подключи ZIP Rokoko');
-  const pending=catalog.entries.filter(e=>!e.face&&clipState(e)!=='Доступен офлайн'&&variantFor(e));
-  if(!pending.length){say(packState());return}
+  const entries=onlySelected?allEntries().filter(entry=>selected.has(entry.id)):catalog.entries;
+  const pending=entries.filter(e=>!e.face&&clipState(e)!=='Доступен офлайн'&&variantFor(e));
+  if(!pending.length){say('Подключи файлы и отметь движения для импорта');return}
   const size=pending.reduce((n,e)=>n+variantFor(e).size,0);
   const quota=await navigator.storage?.estimate?.();
   if(quota?.quota&&quota.quota-quota.usage<16*1048576)throw Error('В браузере осталось мало места');
-  if(!confirm('Подготовить '+pending.length+' записей из ZIP · '+mb(size)+' исходных FBX?'))return;
+  if(!confirm('Подготовить '+pending.length+' движений · '+mb(size)+' исходных FBX?'))return;
   let success=0;const failed=[];
   packRunning=true;stopPack=false;progress.max=pending.length;progress.value=0;progress.hidden=false;
   try{
@@ -299,14 +367,25 @@ async function savePack(){
 function render(){
   if(!catalog||!layout)return;
   const term=search.value.trim().toLocaleLowerCase(),group=type.value,cat=category.value,dir=folder.value;
-  const rows=inventory.filter(row=>(!group||row.kind===group)&&(!cat||cat===row.category)&&(!dir||layout.assignments[row.id]===dir)&&row.name.toLocaleLowerCase().includes(term));
+  const connectedFilter=group==='Rokoko Animations'&&connectedOnly.checked;
+  const rows=inventory.filter(row=>(!group||row.kind===group)&&(!cat||cat===row.category)
+    &&(!dir||layout.assignments[row.id]===dir)&&(!connectedFilter||row.entry&&variantFor(row.entry))
+    &&row.name.toLocaleLowerCase().includes(term));
   const list=element('div');
   let limit=50;
   const more=element('button','Показать ещё',{type:'button',onclick:()=>{limit+=50;show()}});
   function show(){
     const nodes=rows.slice(0,limit).map(row=>{
       const tile=element('article');tile.style.cssText='padding:8px 0;border-bottom:1px solid #45454c';
-      tile.append(element('b',row.name));
+      const entry=row.entry;
+      if(context?.target&&entry&&!entry.face&&variantFor(entry)&&clipState(entry)!=='Доступен офлайн'){
+        const check=element('input','',{type:'checkbox',checked:selected.has(entry.id),disabled:running});
+        check.onchange=()=>{
+          if(check.checked)selected.add(entry.id);else selected.delete(entry.id);
+          updateImportButtons();
+        };
+        const label=element('label');label.append(check,element('b',row.name));tile.append(label);
+      }else tile.append(element('b',row.name));
       const state=row.state?.()||(row.urls?(row.urls.every(url=>localModels.has(url))?'Доступен офлайн':'Не скачан'):'Доступен офлайн');
       tile.append(element('div',[row.kind,row.description,state,layout.assignments[row.id]].filter(Boolean).join(' · ')));
       const actions=element('div','',{className:'row'});
@@ -341,12 +420,18 @@ function render(){
     if(limit<rows.length)list.append(more);
   }
   show();results.replaceChildren(list);
-  packButton.disabled=!context?.target||running;
+  updateImportButtons();
+}
+function updateImportButtons(){
+  if(!packButton)return;
+  packButton.disabled=!context?.target||running||!catalog?.entries.some(e=>!e.face&&variantFor(e));
+  selectedButton.disabled=!context?.target||running||!selected.size;
+  selectedButton.textContent='Добавить выбранные'+(selected.size?' ('+selected.size+')':'');
 }
 async function run(fn){
   if(running)return;
-  running=true;
+  running=true;updateImportButtons();
   try{await fn();await reload()}
   catch(e){say(e.message)}
-  finally{running=false;if(packButton)packButton.disabled=!context?.target}
+  finally{running=false;render()}
 }

@@ -26,7 +26,7 @@ const table=Uint32Array.from({length:256},(_,i)=>{
   for(let bit=0;bit<8;bit++)i=(i>>>1)^((i&1)?0xedb88320:0);
   return i;
 });
-function crc32(data) {
+export function crc32(data) {
   let crc=0xffffffff;
   for(const value of data)crc=(crc>>>8)^table[(crc^value)&255];
   return (crc^0xffffffff)>>>0;
