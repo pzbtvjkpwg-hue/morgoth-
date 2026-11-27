@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Редактор анимаций 2.0 · Duo</title>
+<link rel="stylesheet" href="editor.css">
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"}}
+</script>
+<script type="module" src="editor.js"></script>
+</head>
+<body>
+<header><a href="../">← Duo</a><h1>Редактор анимаций 2.0</h1><output id="status" role="status">Загрузка редактора…</output></header>
+<main>
+<section class="stage" aria-label="Предпросмотр">
+<div id="viewport"></div>
+<div class="tools">
+<label>Персонаж <select id="model"></select></label>
+<label><input id="skeleton" type="checkbox"> Скелет</label>
+<label><input id="trails" type="checkbox"> Траектории</label>
+<label><input id="compare" type="checkbox"> Сравнить с исходной</label>
+</div>
+<div class="timeline">
+<div class="tools">
+<button id="back" aria-label="Предыдущий кадр">−1</button><button id="play">Пуск</button><button id="forward" aria-label="Следующий кадр">+1</button>
+<label>Просмотр <select id="playback"><option value="1">1×</option><option value=".5">½×</option><option value=".25">¼×</option></select></label>
+<output id="clock"></output>
+</div>
+<input id="time" aria-label="Временная шкала" type="range" min="0" max="1" step=".001" value="0">
+</div>
+</section>
+<aside>
+<section>
+<h2>Движение</h2>
+<label>Пресет <select id="library"></select></label>
+<label>Стиль <select id="style"></select></label>
+<div class="tools"><button id="undo">Отменить</button><button id="redo">Повторить</button></div>
+<div class="tools"><label><input type="checkbox" id="root" checked> Root Motion</label><label><input type="checkbox" id="feet" checked> Фиксация стоп</label><label><input type="checkbox" id="grip"> Две руки</label><label><input type="checkbox" id="mirror"> Зеркало</label></div>
+<label>Кривая <select id="curve"><option value="smooth">Плавная</option><option value="linear">Линейная</option><option value="smoother">Мягкий старт и остановка</option></select></label>
+</section>
+<details open><summary>Параметры движения</summary><div id="params"></div></details>
+<details><summary>Ключевые кадры и слои</summary>
+<label>Кость <select id="bone"></select></label>
+<div class="tools"><label>X <input id="rx" type="number" min="-180" max="180" value="0"></label><label>Y <input id="ry" type="number" min="-180" max="180" value="0"></label><label>Z <input id="rz" type="number" min="-180" max="180" value="0"></label></div>
+<label>Слой <select id="layer"><option value="body">Корпус</option><option value="limbs">Конечности</option></select></label>
+<label>Вес слоя <input type="range" id="layerWeight" min="0" max="1" step=".05" value="1"></label>
+<div class="tools"><button id="key">Записать ключ</button><button id="removeKey">Удалить ключ</button></div>
+<select id="keys" aria-label="Ключевые кадры" size="3"></select>
+</details>
+<details><summary>Комбинация</summary>
+<label>Следующее движение <select id="next"></select></label>
+<label>Смешивание, с <input id="blend" type="number" value=".18" min="0" max=".6" step=".01"></label>
+<div class="tools"><button id="append">Добавить</button><button id="clear">Очистить</button></div><ol id="sequence"></ol>
+</details>
+<details><summary>Файлы и мои пресеты</summary>
+<label>Название <input id="name" maxlength="80"></label>
+<div class="tools"><button id="save">Сохранить</button><button id="export">Экспорт JSON</button><button id="import">Импорт</button></div>
+<input id="file" type="file" multiple accept=".json,.glb,.gltf,.fbx,.bvh" hidden>
+<select id="saved" aria-label="Мои пресеты" size="3"></select>
+<div class="tools"><button id="open">Открыть</button><button id="delete">Удалить выбранный</button></div>
+</details>
+</aside>
+</main>
+</body>
+</html>
