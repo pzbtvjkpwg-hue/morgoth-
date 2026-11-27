@@ -1,5 +1,5 @@
 import {crc32,extract,readArchive} from './archive.js';
-import {cacheName,cacheURL,list,load,modelURL,put,readClip,remove,saveFile,storeClip} from './store.js';
+import {cacheName,cacheURL,list,load,modelURL,put,readClip,saveFile,storeClip,transaction} from './store.js';
 
 const source='https://www.rokoko.com/resources/download-263-rokoko-motion-capture-assets';
 const catalogURL=new URL('./rokoko-catalog.json',import.meta.url).href;
@@ -8,7 +8,7 @@ const raw=id=>{try{return JSON.parse(localStorage.getItem(id)||'null')}catch{ret
 const names={morgoth:'Моргот',knight:'Серебряный рыцарь'};
 const modelSizes={"morgoth_lite.glb":2607272,"sword_knight_lite.glb":2122128,"sword_knight.glb":2918380,"morgoth.glb":5369188,"sword_morgoth.glb":1371472,"knight_lite.glb":2840164,"sword_morgoth_lite.glb":748820,"knight.glb":5530212};
 const kClip=(entry,variant,target)=>JSON.stringify(['r1',entry.id,variant.crc,target.key]);
-let catalog,archive,context,layout,cached=new Set(),prior=new Set(),localModels=new Set(),running=false;
+let catalog,archive,context,layout,cached=new Set(),prior=new Set(),importedIds=new Set(),localModels=new Set(),running=false;
 let dialog,results,status,search,category,folder,type,pack,packButton,selectedButton,setupPromise;
 const filesByPath=new Map(),localEntries=new Map(),selected=new Set();
 let catalogFiles;
@@ -61,9 +61,14 @@ function build(){
   const files=element('input','',{type:'file',multiple:true,hidden:true,ariaLabel:'Файлы FBX'});
   const directory=element('input','',{type:'file',multiple:true,hidden:true,ariaLabel:'Папка с FBX'});
   directory.setAttribute('webkitdirectory','');
-  for(const input of [files,directory])input.onchange=()=>run(()=>{
+  for(const input of [files,directory])input.onchange=()=>run(async()=>{
     const picked=[...input.files];input.value='';
-    if(picked.length)connectFiles(picked);
+    if(!picked.length)return;
+    connectFiles(picked);
+    if(input===files&&picked.length===1&&context?.target){
+      const entry=allEntries().find(e=>!e.face&&e.variants.some(v=>filesByPath.get(v.path)===picked[0]));
+      if(entry)await saveClip(entry);
+    }
   });
   const fileButton=button('Выбрать FBX',()=>files.click());
   const folderButton=button('Выбрать папку с FBX',()=>directory.webkitdirectory?directory.click():say('Этот браузер открывает только отдельные файлы. Нажми «Выбрать FBX».'));
@@ -110,7 +115,7 @@ async function previewModel(row){
 function resetFolders(){setOptions(folder,layout.folders,'Все папки')}
 const allEntries=()=>[...catalog.entries,...localEntries.values()];
 function showRokoko(){
-  type.value='Rokoko Animations';
+  type.value='Анимации';
   search.value='';folder.value='';category.value='';connectedOnly.checked=true;
 }
 function connectFiles(picked){
@@ -133,8 +138,8 @@ function connectFiles(picked){
   say('Подключено FBX: '+fbx.length+' · отметь нужные движения галочками');
 }
 function setCategories(){
-  setOptions(category,type.value==='Rokoko Animations'?[...new Set((catalog?allEntries():[]).map(e=>e.category))]:[],'Все категории');
-  category.hidden=connectedLabel.hidden=type.value!=='Rokoko Animations';
+  setOptions(category,type.value==='Анимации'?[...new Set((catalog?allEntries():[]).map(e=>e.category))]:[],'Все категории');
+  category.hidden=connectedLabel.hidden=type.value!=='Анимации';
 }
 async function setup(){
   const response=fetch(catalogURL).then(async response=>{
@@ -160,7 +165,45 @@ async function setup(){
     savedLocalEntries.set(entry.id,entry);
   }
   layout=old||{folders:[],assignments:{}};
-  resetFolders();setCategories();
+}
+function ensureCatalog(){
+  return setupPromise??=setup().catch(e=>{setupPromise=null;throw e});
+}
+function clipRecord(key){
+  try{
+    const [version,id,,target]=JSON.parse(key);
+    if(version==='r1'&&typeof id==='string'&&typeof target==='string')return {id,target};
+  }catch{}
+}
+export async function listImported(target){
+  const keys=await list('clips');
+  if(!keys.some(key=>clipRecord(key)?.target===target.key))return [];
+  await ensureCatalog();
+  const stored=new Set(keys);
+  return allEntries().flatMap(entry=>{
+    const key=entry.variants.map(v=>kClip(entry,v,target)).find(k=>stored.has(k));
+    return key?[{id:entry.id,name:entry.name,key}]:[];
+  });
+}
+export {readClip};
+export async function deleteImported(id){
+  const keys=(await list('clips')).filter(key=>clipRecord(key)?.id===id);
+  if(keys.length)await transaction('clips','readwrite',store=>{
+    let request;
+    for(const key of keys)request=store.delete(key);
+    return request;
+  });
+  for(const key of keys)cached.delete(key);
+  const entry=allEntries().find(e=>e.id===id);
+  if(entry)for(const v of entry.variants)filesByPath.delete(v.path);
+  selected.delete(id);
+  importedIds.delete(id);
+  if(savedLocalEntries.has(id)){
+    const next=[...savedLocalEntries.values()].filter(e=>e.id!==id);
+    await put('layout','local-fbx',next);
+    savedLocalEntries.delete(id);
+  }
+  localEntries.delete(id);
 }
 export async function open(options={}){
   context=options;
@@ -168,9 +211,10 @@ export async function open(options={}){
   if(!dialog.open)dialog.showModal();
   say('Загрузка каталога…');
   try{
-    await (setupPromise??=setup().catch(e=>{setupPromise=null;throw e}));
+    await ensureCatalog();
+    resetFolders();
     await reload();
-    say('Rokoko Animations · '+catalog.entries.length+' записей · ZIP '+mb(catalog.bytes));
+    say('Импорт анимаций · FBX, папка или ZIP');
   }catch(e){say(e.message)}
 }
 async function reload(){
@@ -179,9 +223,9 @@ async function reload(){
   const [characters,weapons,keys,urls]=await Promise.all([DS.chrList(),DS.wpnList(),list('clips'),cache.keys()]);
   if(version!==refresh)return;
   cached=new Set(keys);
-  prior=new Set(keys.flatMap(key=>{
-    try{const [,id,,target]=JSON.parse(key);return [target+':'+id]}catch{return []}
-  }));
+  const records=keys.map(clipRecord).filter(Boolean);
+  prior=new Set(records.map(({id,target})=>target+':'+id));
+  importedIds=new Set(records.map(({id})=>id));
   localModels=new Set(urls.map(r=>r.url));
   inventory=makeInventory(characters,weapons);
   setOptions(type,[...new Set(inventory.map(row=>row.kind))],'Все ресурсы');
@@ -254,15 +298,15 @@ function makeInventory(characters,weapons){
     });
   }
   for(const [id,label] of [...Object.entries(names),...characters.map(c=>[c.id,c.name])])out.push(...presetRows(id,label));
-  out.push({id:'pack:rokoko',name:'Rokoko Animations',kind:'Паки анимаций',description:'ZIP '+mb(catalog.bytes),
-    state:()=>packState(),apply:()=>{type.value='Rokoko Animations';setCategories();render()}});
   for(const entry of allEntries()){
+    if(!variantFor(entry)&&!importedIds.has(entry.id))continue;
     const v=entry.variants[0];
-    out.push({id:'rokoko:'+entry.id,name:entry.name,kind:'Rokoko Animations',category:entry.category,
+    out.push({id:'rokoko:'+entry.id,name:entry.name,kind:'Анимации',category:entry.category,
       description:entry.category+' · '+v.rig+' · '+mb(v.size),
-      entry,state:()=>clipState(entry),download:context?.target&&!entry.face?()=>saveClip(entry):null,
-      apply:context?.target&&!entry.face?async()=>context.openClip(await saveClip(entry)):null,
-      clear:context?.target&&clipState(entry)==='Доступен офлайн'?()=>clearClip(entry):null});
+      entry,state:()=>clipState(entry),download:context?.target&&!entry.face&&variantFor(entry)?()=>saveClip(entry):null,
+      apply:context?.target&&!entry.face&&(variantFor(entry)||clipState(entry)==='Доступен офлайн')
+        ?async()=>context.openClip(await saveClip(entry)):null,
+      clear:importedIds.has(entry.id)?()=>clearClip(entry):null});
   }
   return out;
 }
@@ -296,15 +340,10 @@ async function inputBytes(variant){
 }
 function clipState(entry){
   if(entry.face)return 'Лицевая дорожка · нужен лицевой риг';
-  if(!context?.target)return 'Выбери персонажа в редакторе';
+  if(!context?.target)return importedIds.has(entry.id)?'Доступен офлайн':'Выбери персонажа в редакторе';
   if(entry.variants.some(v=>cached.has(kClip(entry,v,context.target))))return 'Доступен офлайн';
-  return prior.has(context.target.key+':'+entry.id)?'Доступно обновление':'Не скачан';
-}
-function packState(){
-  if(!context?.target)return 'Выбери персонажа в редакторе';
-  const compatible=catalog.entries.filter(e=>!e.face);
-  const total=compatible.filter(e=>clipState(e)==='Доступен офлайн').length;
-  return total===compatible.length?'Доступен офлайн':total+' / '+compatible.length+' доступны офлайн';
+  if(prior.has(context.target.key+':'+entry.id))return 'Доступно обновление';
+  return importedIds.has(entry.id)&&!variantFor(entry)?'Импортировано для другого персонажа':'Не скачан';
 }
 async function saveClip(entry){
   const target=context.target;
@@ -337,9 +376,9 @@ async function saveClip(entry){
   throw failure||Error('Подключи ZIP, папку или файл FBX для этого движения');
 }
 async function clearClip(entry){
-  if(!confirm('Удалить офлайн-копию «'+entry.name+'»?'))return;
-  for(const variant of entry.variants)await remove('clips',kClip(entry,variant,context.target));
-  say('Офлайн-копия удалена');
+  if(!confirm('Удалить импорт «'+entry.name+'» из игры? Сохранённые пресеты останутся.'))return;
+  await deleteImported(entry.id);
+  say('Импорт удалён');
 }
 async function savePack(onlySelected){
   if(!context?.target)throw Error('Открой редактор персонажа');
@@ -367,7 +406,7 @@ async function savePack(onlySelected){
 function render(){
   if(!catalog||!layout)return;
   const term=search.value.trim().toLocaleLowerCase(),group=type.value,cat=category.value,dir=folder.value;
-  const connectedFilter=group==='Rokoko Animations'&&connectedOnly.checked;
+  const connectedFilter=group==='Анимации'&&connectedOnly.checked;
   const rows=inventory.filter(row=>(!group||row.kind===group)&&(!cat||cat===row.category)
     &&(!dir||layout.assignments[row.id]===dir)&&(!connectedFilter||row.entry&&variantFor(row.entry))
     &&row.name.toLocaleLowerCase().includes(term));
@@ -406,14 +445,14 @@ function render(){
         actions.append(button('Переименовать',async()=>{const n=prompt('Новое название',row.name)?.trim().slice(0,80);if(n)await row.rename(n)}));
         actions.append(button('Удалить',async()=>{if(confirm('Удалить «'+row.name+'»?'))await row.delete()}));
       }
-      if(row.clear)actions.append(button('Удалить офлайн-копию',row.clear));
+      if(row.clear)actions.append(button('Удалить импорт',row.clear));
       tile.append(actions);return tile;
     });
     const body=[];
     let previous=null;
     for(const [i,node] of nodes.entries()){
       const name=rows[i].category;
-      if(group==='Rokoko Animations'&&name!==previous){body.push(element('h3',name));previous=name}
+      if(group==='Анимации'&&name&&name!==previous){body.push(element('h3',name));previous=name}
       body.push(node);
     }
     list.replaceChildren(element('div','Ресурсов: '+rows.length),...body);
@@ -431,7 +470,7 @@ function updateImportButtons(){
 async function run(fn){
   if(running)return;
   running=true;updateImportButtons();
-  try{await fn();await reload()}
+  try{await fn();await reload();await context?.onImportsChanged?.()}
   catch(e){say(e.message)}
   finally{running=false;render()}
 }
